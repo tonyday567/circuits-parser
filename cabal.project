@@ -1,0 +1,6 @@
+packages:
+  circuits-parser.cabal
+  ../circuits/circuits.cabal
+  ../circuits-perf/circuits-perf.cabal
+
+write-ghc-environment-files: always

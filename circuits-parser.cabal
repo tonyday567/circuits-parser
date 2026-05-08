@@ -1,0 +1,50 @@
+cabal-version: 3.0
+name: circuits-parser
+version: 0.1.0.0
+license: BSD-3-Clause
+author: Tony Day
+maintainer: tonyday567@gmail.com
+category: parsing
+build-type: Simple
+tested-with: ghc ==9.14.1
+
+library
+  exposed-modules:
+    Circuit.Parser
+    Circuit.Parser.Token
+
+  build-depends:
+    base >=4.20 && <5,
+    bytestring,
+    circuits,
+    clock >=0.8 && <0.9,
+    containers,
+    deepseq,
+    harpie,
+    prettyprinter,
+    text,
+    these,
+
+  hs-source-dirs: src
+  default-language: GHC2024
+  ghc-options:
+    -Wall
+    -Wcompat
+
+benchmark parse-bench
+  type: exitcode-stdio-1.0
+  main-is: bench-parse.hs
+  build-depends:
+    base >=4.20 && <5,
+    bytestring,
+    circuits-parser,
+    circuits-perf,
+    text,
+
+  hs-source-dirs: app
+  default-language: GHC2024
+  ghc-options:
+    -Wall
+    -Wcompat
+    -O2
+    -threaded
