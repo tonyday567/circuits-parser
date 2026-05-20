@@ -10,6 +10,7 @@ tested-with: ghc ==9.14.1
 
 library
   exposed-modules:
+    Circuit.Markup
     Circuit.Parser
     Circuit.Parser.Token
 
