@@ -11,6 +11,7 @@ tested-with: ghc ==9.14.1
 library
   exposed-modules:
     Circuit.Markup
+    Circuit.Mealy
     Circuit.Parser
     Circuit.Parser.Lexer
     Circuit.Parser.Primitives
@@ -25,10 +26,24 @@ library
     deepseq,
     harpie,
     prettyprinter,
+    profunctors,
     text,
     these,
 
   hs-source-dirs: src
+  default-language: GHC2024
+  ghc-options:
+    -Wall
+    -Wcompat
+
+executable mealy-example
+  main-is: mealy-example.hs
+  build-depends:
+    base >=4.20 && <5,
+    bytestring,
+    circuits-parser,
+
+  hs-source-dirs: app
   default-language: GHC2024
   ghc-options:
     -Wall
