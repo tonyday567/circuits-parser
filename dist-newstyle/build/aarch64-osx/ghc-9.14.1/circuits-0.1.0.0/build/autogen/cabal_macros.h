@@ -30,16 +30,6 @@
   (major1) == 5 && (major2) <  6 || \
   (major1) == 5 && (major2) == 6 && (minor) <= 3)
 #endif /* MIN_VERSION_profunctors */
-/* package these-1.2.1 */
-#ifndef VERSION_these
-#define VERSION_these "1.2.1"
-#endif /* VERSION_these */
-#ifndef MIN_VERSION_these
-#define MIN_VERSION_these(major1,major2,minor) (\
-  (major1) <  1 || \
-  (major1) == 1 && (major2) <  2 || \
-  (major1) == 1 && (major2) == 2 && (minor) <= 1)
-#endif /* MIN_VERSION_these */
 
 /* tool cpphs-1.20.9 */
 #ifndef TOOL_VERSION_cpphs
@@ -51,15 +41,15 @@
   (major1) == 1 && (major2) <  20 || \
   (major1) == 1 && (major2) == 20 && (minor) <= 9)
 #endif /* MIN_TOOL_VERSION_cpphs */
-/* tool doctest-0.24.2 */
+/* tool doctest-0.24.3 */
 #ifndef TOOL_VERSION_doctest
-#define TOOL_VERSION_doctest "0.24.2"
+#define TOOL_VERSION_doctest "0.24.3"
 #endif /* TOOL_VERSION_doctest */
 #ifndef MIN_TOOL_VERSION_doctest
 #define MIN_TOOL_VERSION_doctest(major1,major2,minor) (\
   (major1) <  0 || \
   (major1) == 0 && (major2) <  24 || \
-  (major1) == 0 && (major2) == 24 && (minor) <= 2)
+  (major1) == 0 && (major2) == 24 && (minor) <= 3)
 #endif /* MIN_TOOL_VERSION_doctest */
 /* tool gcc-15.0.0 */
 #ifndef TOOL_VERSION_gcc

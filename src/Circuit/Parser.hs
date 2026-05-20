@@ -75,6 +75,7 @@ where
 
 import Circuit (Circuit (..), reify)
 import Data.These (These (..))
+import Data.Word (Word8)
 import qualified Data.ByteString as B
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -120,6 +121,11 @@ instance Uncons B.ByteString Char where
   uncons bs
     | B.null bs = That bs
     | otherwise = These (toEnum (fromIntegral (B.head bs)) :: Char) (B.tail bs)
+
+instance Uncons B.ByteString Word8 where
+  uncons bs
+    | B.null bs = That bs
+    | otherwise = These (B.head bs) (B.tail bs)
 
 instance Uncons Text Char where
   uncons t
@@ -277,7 +283,7 @@ empty = Parser $ Lift $ \s -> That s
 -- That "abc"
 (<|>) :: Parser f s a -> Parser f s a -> Parser f s a
 infixl 3 <|>
-(Parser p1) <|> (Parser p2) = Parser $ Loop body
+(Parser p1) <|> (Parser p2) = Parser $ Knot body
   where
     body (Right s) = case reify p1 s of
       This a     -> Right (This a)

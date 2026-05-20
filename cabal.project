@@ -1,6 +1,6 @@
 packages:
   circuits-parser.cabal
   ../circuits/circuits.cabal
-  ../circuits-perf/circuits-perf.cabal
+  ../circuits-meter/circuits-meter.cabal
 
 write-ghc-environment-files: always
