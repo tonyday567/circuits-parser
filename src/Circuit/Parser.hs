@@ -31,6 +31,8 @@ module Circuit.Parser
 
     -- * Running
     runParser,
+    runParserMaybe,
+    runParserError,
 
     -- * Building
     satisfy,
@@ -55,6 +57,7 @@ module Circuit.Parser
     -- * These helpers
     asThese,
     asMaybe',
+    asEither,
 
     -- * Choice
     empty,
@@ -210,17 +213,31 @@ thenThese (This a)    f = f a emptyF
 thenThese (That s)    _ = That s
 thenThese (These a s) f = f a s
 
--- | Extract value from These.
-asThese :: Show e => These e a -> a
-asThese (That a)    = a
-asThese (This e)    = error (show e)
-asThese (These _ a) = a
+-- | Extract value from a parse result, erroring on failure.
+asThese :: These a f -> a
+asThese (This a)    = a
+asThese (These a _) = a
+asThese (That _)    = error "parse failed"
 
--- | Convert These to Maybe, strictly.
-asMaybe' :: These e a -> Maybe a
-asMaybe' (That a)    = Just a
-asMaybe' (This _)    = Nothing
-asMaybe' (These _ _) = Nothing
+-- | Convert a parse result to Maybe.
+asMaybe' :: These a f -> Maybe a
+asMaybe' (This a)    = Just a
+asMaybe' (These a _) = Just a
+asMaybe' (That _)    = Nothing
+
+-- | Convert a parse result to Either (failure returns Left with the leftover stream).
+asEither :: These a f -> Either f a
+asEither (This a)    = Right a
+asEither (These a _) = Right a
+asEither (That f)    = Left f
+
+-- | Run a parser and extract the result as Maybe.
+runParserMaybe :: Parser f s a -> f -> Maybe a
+runParserMaybe p f = asMaybe' (runParser p f)
+
+-- | Run a parser and extract the result, erroring on failure.
+runParserError :: Parser f s a -> f -> a
+runParserError p f = asThese (runParser p f)
 
 instance Functor (Parser f s) where
   fmap f (Parser p) = Parser $ Lift $ \s ->
