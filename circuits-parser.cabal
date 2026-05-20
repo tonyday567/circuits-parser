@@ -12,6 +12,7 @@ library
   exposed-modules:
     Circuit.Markup
     Circuit.Parser
+    Circuit.Parser.Lexer
     Circuit.Parser.Primitives
     Circuit.Parser.Token
 
