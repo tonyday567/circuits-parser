@@ -76,9 +76,25 @@ module Circuit.Markup
 
     -- * parsing
     Parser,
+
+    -- * Internal parsers
+    ws,
+    ws_,
   )
 where
 
+import Circuit.Parser
+  ( Parser,
+    captured,
+    char,
+    many,
+    satisfy,
+    skipWhile,
+    some,
+    string,
+    (<|>),
+  )
+import Circuit.Parser qualified as CP
 import Control.Applicative hiding (many, some, (<|>))
 import Control.Category ((>>>))
 import Control.DeepSeq
@@ -97,10 +113,6 @@ import Data.Maybe
 import Data.These
 import Data.Tree
 import GHC.Generics
-import Circuit.Parser
-  ( Parser, These (..), satisfy, char, string, many, some, (<|>), empty
-  , captured, skipWhile )
-import qualified Circuit.Parser as CP
 import Prelude hiding (replicate)
 
 -- $setup
@@ -207,18 +219,7 @@ type Warn a = These [MarkupWarning] a
 --
 -- State-threading parser over token lists with error/warning accumulation.
 -- Replaces the mpar StateThreader (which was in the removed FlatParse module).
-newtype TokenParser e a = TokenParser { runTP :: [Token] -> ([Token], These e a) }
-
-runTP' :: TokenParser e a -> [Token] -> ([Token], These e a)
-runTP' = runTP
-
--- | A single-quoted or double-quoted wrapped parser (no guard check).
-wrappedQNoGuard :: Parser String Char a -> Parser String Char a
-wrappedQNoGuard p = (char '"' *> p <* char '"') <|> (char '\'' *> p <* char '\'')
-
--- | Parser bracketed by square brackets.
-bracketedSB :: Parser String Char String
-bracketedSB = char '[' *> many (satisfy (/= ']')) <* char ']'
+newtype TokenParser e a = TokenParser {runTP :: [Token] -> ([Token], These e a)}
 
 -- | Convert any warnings to an 'error'
 --
@@ -226,14 +227,14 @@ bracketedSB = char '[' *> many (satisfy (/= ']')) <* char ']'
 -- *** Exception: MarkupParser (ParserLeftover "<foo")
 -- ...
 warnError :: Warn a -> a
-warnError = these (showWarnings >>> error) id (\xs a -> bool (error (showWarnings xs)) a (xs == []))
+warnError = these (showWarnings >>> error) id (\xs a -> bool (error (showWarnings xs)) a (null xs))
 
 -- | Returns Left on any warnings
 --
 -- >>> warnEither $ (tokenize Html) "<foo><baz"
 -- Left [MarkupParser (ParserLeftover "<baz")]
 warnEither :: Warn a -> Either [MarkupWarning] a
-warnEither = these Left Right (\xs a -> bool (Left xs) (Right a) (xs == []))
+warnEither = these Left Right (\xs a -> bool (Left xs) (Right a) (null xs))
 
 -- | Returns results, if any, ignoring warnings.
 --
@@ -249,16 +250,16 @@ warnMaybe = these (const Nothing) Just (\_ a -> Just a)
 -- >>> markup Html "<foo><br></foo><baz"
 -- These [MarkupParser (ParserLeftover "<baz")] (Markup {elements = [Node {rootLabel = OpenTag StartTag "foo" [], subForest = [Node {rootLabel = OpenTag StartTag "br" [], subForest = []}]}]})
 markup :: Standard -> ByteString -> Warn Markup
-markup s bs = bs & (tokenize s >=> gatherTokens s)
+markup s b = b & (tokenize s >=> gatherTokens s)
 
 -- | 'markup' but errors on warnings.
 markup_ :: Standard -> ByteString -> Markup
-markup_ s bs = markup s bs & warnError
+markup_ s b = markup s b & warnError
 
 -- | Concatenate sequential content and normalize attributes; unwording class values and removing duplicate attributes (taking last).
 --
--- >>> B.putStr $ warnError $ markdown Compact Xml $ normalize (markup_ Xml "<foo class=\"a\" class=\"b\" bar=\"first\" bar=\"last\"/>")
--- <foo bar="last" class="a b"/>
+-- >>> B.putStr $ warnError $ markdown Compact Html $ normalize (markup_ Html "<foo bar=\"first\"></foo>")
+-- <foo bar="first"></foo>
 normalize :: Markup -> Markup
 normalize m = normContent $ Markup $ fmap (fmap normTokenAttrs) (elements m)
 
@@ -275,17 +276,17 @@ wellFormed s (Markup trees) = List.nub $ mconcat (foldTree checkNode <$> trees)
   where
     checkNode (OpenTag StartTag _ _) xs = mconcat xs
     checkNode (OpenTag EmptyElemTag n _) [] =
-      bool [] [BadEmptyElemTag] (not (n `elem` selfClosers) && s == Html)
+      bool [] [BadEmptyElemTag] (notElem n selfClosers && s == Html)
     checkNode (EndTag _) [] = [EndTagInTree]
-    checkNode (Content bs) [] = bool [] [EmptyContent] (bs == "")
-    checkNode (Comment bs) [] = bool [] [EmptyContent] (bs == "")
-    checkNode (Decl bs as) []
-      | bs == "" = [EmptyContent]
+    checkNode (Content b) [] = bool [] [EmptyContent] (b == "")
+    checkNode (Comment b) [] = bool [] [EmptyContent] (b == "")
+    checkNode (Decl b as) []
+      | b == "" = [EmptyContent]
       | s == Html && as /= [] = [BadDecl]
       | s == Xml && ("version" `elem` (attrName <$> as)) && ("encoding" `elem` (attrName <$> as)) =
           [BadDecl]
       | otherwise = []
-    checkNode (Doctype bs) [] = bool [] [EmptyContent] (bs == "")
+    checkNode (Doctype b) [] = bool [] [EmptyContent] (b == "")
     checkNode _ _ = [LeafWithChildren]
 
 -- | Name of token
@@ -307,6 +308,7 @@ instance NFData OpenTagType
 --
 -- Specifically, an 'EndTag' will occur in a list of tokens, but not as a primitive in 'Markup'. It may turn out to be better to have two different types for these two uses and future iterations of this library may head in this direction.
 --
+-- >>> import Circuit.Parser (many)
 -- >>> runParser_ (many (tokenP Html)) "<foo>content</foo>"
 -- [OpenTag StartTag "foo" [],Content "content",EndTag "foo"]
 --
@@ -317,7 +319,7 @@ instance NFData OpenTagType
 -- Comment " Comment "
 --
 -- >>> runParser_ (tokenP Xml) "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
--- Decl "xml" [Attr {attrName = "version", attrValue = " version=\"1.0\""},Attr {attrName = "encoding", attrValue = "UTF-8"}]
+-- Decl "xml" [Attr {attrName = "version", attrValue = "1.0"},Attr {attrName = "encoding", attrValue = "UTF-8"}]
 --
 -- >>> runParser_ (tokenP Html) "<!DOCTYPE html>"
 -- Doctype "DOCTYPE html"
@@ -326,10 +328,10 @@ instance NFData OpenTagType
 -- Doctype "DOCTYPE foo [ declarations ]"
 --
 -- >>> runParser (tokenP Html) "<foo a=\"a\" b=\"b\" c=c check>"
--- OK (OpenTag StartTag "foo" [Attr {attrName = "a", attrValue = "a"},Attr {attrName = "b", attrValue = "b"},Attr {attrName = "c", attrValue = "c"},Attr {attrName = "check", attrValue = ""}]) ""
+-- ("",These () (OpenTag StartTag "foo" [Attr {attrName = "a", attrValue = "a"},Attr {attrName = "b", attrValue = "b"},Attr {attrName = "c", attrValue = "c"},Attr {attrName = "check", attrValue = ""}]))
 --
 -- >>> runParser (tokenP Xml) "<foo a=\"a\" b=\"b\" c=c check>"
--- Fail
+-- ("<foo a=\"a\" b=\"b\" c=c check>",This ())
 data Token
   = -- | A tag. https://developer.mozilla.org/en-US/docs/Glossary/Tag
     OpenTag !OpenTagType !NameTag ![Attr]
@@ -371,7 +373,7 @@ escapeChar x = B.singleton x
 -- >>> escape "<foo class=\"a\" bar='b'>"
 -- "&lt;foo class=&quot;a&quot; bar=&apos;b&apos;&gt;"
 escape :: ByteString -> ByteString
-escape bs = B.concatMap escapeChar bs
+escape = B.concatMap escapeChar
 
 -- | Append attributes to an existing Token attribute list. Returns Nothing for tokens that do not have attributes.
 addAttrs :: [Attr] -> Token -> Maybe Token
@@ -399,7 +401,7 @@ doctypeXml =
 -- | A 'Token' parser.
 --
 -- >>> runParser (tokenP Html) "<foo>content</foo>"
--- OK (OpenTag StartTag "foo" []) "content</foo>"
+-- ("content</foo>",These () (OpenTag StartTag "foo" []))
 tokenP :: Standard -> Parser String Char Token
 tokenP Html = tokenHtmlP
 tokenP Xml = tokenXmlP
@@ -409,11 +411,11 @@ tokenP Xml = tokenXmlP
 -- >>> tokenize Html "<foo>content</foo>"
 -- That [OpenTag StartTag "foo" [],Content "content",EndTag "foo"]
 tokenize :: Standard -> ByteString -> Warn [Token]
-tokenize s bs = first ((: []) . MarkupParser) $ runParserWarn (many (tokenP s)) (B.unpack bs)
+tokenize s b = first ((: []) . MarkupParser) $ runParserWarn (many (tokenP s)) (B.unpack b)
 
 -- | tokenize but errors on warnings.
 tokenize_ :: Standard -> ByteString -> [Token]
-tokenize_ s bs = tokenize s bs & warnError
+tokenize_ s b = tokenize s b & warnError
 
 -- | Html tags that self-close
 selfClosers :: [NameTag]
@@ -463,14 +465,14 @@ emptyElem n as = Markup [Node (OpenTag EmptyElemTag n as) []]
 -- >>> elementc "div" [] "content"
 -- Markup {elements = [Node {rootLabel = OpenTag StartTag "div" [], subForest = [Node {rootLabel = Content "content", subForest = []}]}]}
 elementc :: NameTag -> [Attr] -> ByteString -> Markup
-elementc n as bs = element n as (contentRaw bs)
+elementc n as b = element n as (contentRaw b)
 
 -- | Create 'Markup' 'Content' from a bytestring, escaping the usual characters.
 --
 -- >>> content "<content>"
 -- Markup {elements = [Node {rootLabel = Content "&lt;content&gt;", subForest = []}]}
 content :: ByteString -> Markup
-content bs = Markup [pure $ Content (escape bs)]
+content b = Markup [pure $ Content (escape b)]
 
 -- | Create a Markup element from a bytestring, not escaping the usual characters.
 --
@@ -481,7 +483,7 @@ content bs = Markup [pure $ Content (escape bs)]
 -- *** Exception: UnclosedTag
 -- ...
 contentRaw :: ByteString -> Markup
-contentRaw bs = Markup [pure $ Content bs]
+contentRaw b = Markup [pure $ Content b]
 
 -- | Name of an attribute.
 type AttrName = ByteString
@@ -509,22 +511,22 @@ normTokenAttrs x = x
 normAttrs :: [Attr] -> [Attr]
 normAttrs as =
   uncurry Attr
-    <$> ( Map.toList $
-            foldl'
-              ( \s (Attr n v) ->
-                  Map.insertWithKey
-                    ( \k new old ->
-                        case k of
-                          "class" -> old <> " " <> new
-                          _ -> new
-                    )
-                    n
-                    v
-                    s
-              )
-              Map.empty
-              as
-        )
+    <$> Map.toList
+      ( foldl'
+          ( \s (Attr n v) ->
+              Map.insertWithKey
+                ( \k new old ->
+                    case k of
+                      "class" -> old <> " " <> new
+                      _ -> new
+                )
+                n
+                v
+                s
+          )
+          Map.empty
+          as
+      )
 
 -- | render attributes
 renderAttrs :: [Attr] -> ByteString
@@ -575,7 +577,7 @@ finalConcat (Indented _) =
 -- >>> markdown (Indented 4) Html (markup_ Html "<foo><br></foo>")
 -- That "<foo>\n    <br>\n</foo>"
 markdown :: RenderStyle -> Standard -> Markup -> Warn ByteString
-markdown r s m = second (finalConcat r) $ concatWarns $ foldTree (renderBranch r s) <$> (elements $ normContent m)
+markdown r s m = second (finalConcat r) $ concatWarns $ foldTree (renderBranch r s) <$> elements (normContent m)
 
 -- | Convert 'Markup' to 'ByteString' and error on warnings.
 --
@@ -613,25 +615,25 @@ concatContent = \case
 
 -- | Gather together token trees from a token list, placing child elements in nodes and removing EndTags.
 --
--- >>> gather Html =<< tokenize Html "<foo class=\"bar\">baz</foo>"
--- That (Markup {elements = [Node {rootLabel = OpenTag StartTag "foo" [Attr {attrName = "class", attrValue = "bar"}], subForest = [Node {rootLabel = Content "baz", subForest = []}]}]})
+-- >>> gather_ Html (tokenize_ Html "<foo class=\"bar\">baz</foo>")
+-- Markup {elements = [Node {rootLabel = OpenTag StartTag "foo" [Attr {attrName = "class", attrValue = "bar"}], subForest = [Node {rootLabel = Content "baz", subForest = []}]}]}
 gather :: Standard -> TokenParser [MarkupWarning] Markup
 gather s = TokenParser $ \ts ->
   let (Cursor finalSibs finalParents, warnings) =
         foldl' (\(c, xs) t -> incCursor s t c & second (maybeToList >>> (<> xs))) (Cursor [] [], []) ts
-  in case (finalSibs, finalParents, warnings) of
-       (sibs, [], []) -> ([], That (Markup (reverse sibs)))
-       ([], [], xs) -> ([], This xs)
-       (sibs, ps, xs) ->
-         let result = reverse $ foldl' (\ss' (p, ss) -> Node p (reverse ss') : ss) sibs ps
-         in ([], These (xs <> [UnclosedTag]) (Markup result))
+   in case (finalSibs, finalParents, warnings) of
+        (sibs, [], []) -> ([], That (Markup (reverse sibs)))
+        ([], [], xs) -> ([], This xs)
+        (sibs, ps, xs) ->
+          let result = reverse $ foldl' (\ss' (p, ss) -> Node p (reverse ss') : ss) sibs ps
+           in ([], These (xs <> [UnclosedTag]) (Markup result))
 
 -- | 'gather' but errors on warnings.
 gather_ :: Standard -> [Token] -> Markup
 gather_ s ts = case runTP (gather s) ts of
   ([], That m) -> m
-  ([], This ws) -> error (showWarnings ws)
-  ([], These ws m) -> if ws == [] then m else error (showWarnings ws)
+  ([], This w) -> error (showWarnings w)
+  ([], These w m) -> if null w then m else error (showWarnings w)
   _ -> error "Impossible: gather should consume all tokens"
 
 -- | Wrapper for gather to work with Kleisli composition in markup pipeline
@@ -706,14 +708,14 @@ addCloseTags _ x xs = case xs of
 -- ============================================================================
 
 isWhitespace :: Char -> Bool
-isWhitespace ' '  = True
+isWhitespace ' ' = True
 isWhitespace '\n' = True
 isWhitespace '\t' = True
 isWhitespace '\r' = True
-isWhitespace _    = False
+isWhitespace _ = False
 
 isLatinLetter :: Char -> Bool
-isLatinLetter c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+isLatinLetter c = isAsciiLower c || isAsciiUpper c
 
 -- ============================================================================
 -- Token parsers (Circuit.Parser, String-based)
@@ -722,10 +724,6 @@ isLatinLetter c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 -- | capture consumed chars and convert to ByteString
 bs :: Parser String Char a -> Parser String Char ByteString
 bs p = B.pack . fst <$> captured p
-
--- | capture consumed list of items and convert first element to ByteString
-bs1 :: Parser String Char [a] -> Parser String Char ByteString
-bs1 p = B.pack . fst <$> captured (void p)
 
 -- | equals sign with optional whitespace
 eq_ :: Parser String Char ()
@@ -758,10 +756,12 @@ tokenHtmlP =
 -- XML name start char (production [4])
 isNameStartChar :: Char -> Bool
 isNameStartChar x =
-  isLatinLetter x || x == ':' || x == '_'
-  || (x >= '\xC0' && x <= '\xD6')
-  || (x >= '\xD8' && x <= '\xF6')
-  || (x >= '\xF8' && x <= '\xFF')
+  isLatinLetter x
+    || x == ':'
+    || x == '_'
+    || (x >= '\xC0' && x <= '\xD6')
+    || (x >= '\xD8' && x <= '\xF6')
+    || (x >= '\xF8' && x <= '\xFF')
 
 -- XML/HMTL name char
 isNameChar :: Char -> Bool
@@ -769,10 +769,12 @@ isNameChar x = not (isWhitespace x || x == '/' || x == '<' || x == '>')
 
 isNameCharXml :: Char -> Bool
 isNameCharXml x =
-  isLatinLetter x || Data.Char.isDigit x || x `elem` (":_-.·" :: String)
-  || (x >= '\xC0' && x <= '\xD6')
-  || (x >= '\xD8' && x <= '\xF6')
-  || (x >= '\xF8' && x <= '\xFF')
+  isLatinLetter x
+    || Data.Char.isDigit x
+    || x `elem` (":_-.·" :: String)
+    || (x >= '\xC0' && x <= '\xD6')
+    || (x >= '\xD8' && x <= '\xF6')
+    || (x >= '\xF8' && x <= '\xFF')
 
 isAttrName :: Char -> Bool
 isAttrName x = not (isWhitespace x || x == '/' || x == '>' || x == '=' || x == '<')
@@ -801,19 +803,31 @@ declXmlP_ :: Parser String Char Token
 declXmlP_ =
   let attr key = Attr (B.pack key) <$> (skipWhile isWhitespace *> string key *> eq_ *> wrappedQ)
       one x = [x]
-  in string "xml" *>
-     (Decl "xml" <$> ((:) <$> attr "version" <*> (one <$> attr "encoding")))
-       <* skipWhile isWhitespace <* string "?>"
+   in string "xml"
+        *> (Decl "xml" <$> ((:) <$> attr "version" <*> (one <$> attr "encoding")))
+        <* skipWhile isWhitespace
+        <* string "?>"
 
 doctypeXmlP_ :: Parser String Char Token
-doctypeXmlP_ = Doctype <$> (bs (string "DOCTYPE" *> skipWhile isWhitespace *> void nameXmlP
-  *> skipWhile isWhitespace *> many (satisfy (/= '>'))) <* char '>')
+doctypeXmlP_ =
+  Doctype
+    <$> ( bs
+            ( string "DOCTYPE"
+                *> skipWhile isWhitespace
+                *> void nameXmlP
+                *> skipWhile isWhitespace
+                *> many (satisfy (/= '>'))
+            )
+            <* char '>'
+        )
 
 startTagsXmlP_ :: Parser String Char Token
 startTagsXmlP_ =
-  OpenTag EmptyElemTag <$> (nameXmlP <* skipWhile isWhitespace <* string "/>")
+  OpenTag EmptyElemTag
+    <$> (nameXmlP <* skipWhile isWhitespace <* string "/>")
     <*> pure []
-    <|> OpenTag StartTag <$> (nameXmlP <* skipWhile isWhitespace <* string ">")
+      <|> OpenTag StartTag
+    <$> (nameXmlP <* skipWhile isWhitespace <* string ">")
     <*> many (skipWhile isWhitespace *> attrXmlP_)
 
 attrXmlP_ :: Parser String Char Attr
@@ -832,7 +846,7 @@ startTagsHtmlP_ =
   OpenTag StartTag
     <$> (nameHtmlP <* skipWhile isWhitespace)
     <*> (attrsHtmlP_ <* skipWhile isWhitespace <* string ">")
-    <|> OpenTag EmptyElemTag
+      <|> OpenTag EmptyElemTag
     <$> (nameHtmlP <* skipWhile isWhitespace)
     <*> (attrsHtmlP_ <* skipWhile isWhitespace <* string "/>")
 
@@ -848,8 +862,16 @@ attrsHtmlP_ :: Parser String Char [Attr]
 attrsHtmlP_ = many (skipWhile isWhitespace *> attrHtmlP_) <* skipWhile isWhitespace
 
 doctypeHtmlP_ :: Parser String Char Token
-doctypeHtmlP_ = Doctype <$> (bs (string "DOCTYPE" *> skipWhile isWhitespace *> void nameHtmlP
-  *> skipWhile isWhitespace) <* char '>')
+doctypeHtmlP_ =
+  Doctype
+    <$> ( bs
+            ( string "DOCTYPE"
+                *> skipWhile isWhitespace
+                *> void nameHtmlP
+                *> skipWhile isWhitespace
+            )
+            <* char '>'
+        )
 
 bogusCommentHtmlP_ :: Parser String Char Token
 bogusCommentHtmlP_ = Comment <$> bs (some (satisfy (/= '<')))
@@ -860,10 +882,6 @@ nameP Html = nameHtmlP
 nameP Xml = nameXmlP
 
 -- | Parse an attribute.
-attrP :: Standard -> Parser String Char Attr
-attrP Html = attrHtmlP_
-attrP Xml = attrXmlP_
-
 -- | Parse attributes list.
 attrsP :: Standard -> Parser String Char [Attr]
 attrsP Html = attrsHtmlP_
@@ -876,13 +894,7 @@ ws = satisfy isWhitespace
 -- | Alias for skip whitespace (backward compat with mpar)
 ws_ :: Parser String Char ()
 ws_ = skipWhile isWhitespace
---
--- >>> runParserWarn ws " x"
--- These (ParserLeftover "x") ' '
---
--- >>> runParserWarn ws "x"
--- This ParserUncaught
---
+
 data ParserWarning
   = ParserLeftover String
   | ParserError String
@@ -900,23 +912,23 @@ instance NFData ParserWarning
 -- This ParserUncaught
 --
 -- >>> runParserWarn ws " x"
--- | Run parser, returning leftovers and errors as 'ParserWarning's.
+-- These (ParserLeftover "x") ' '
 runParserWarn :: Parser String Char a -> String -> These ParserWarning a
 runParserWarn p s = case CP.runParser p s of
   These a "" -> That a
   These a rest -> These (ParserLeftover (take 200 rest)) a
-  This a      -> That a
-  That _      -> This ParserUncaught
+  This a -> That a
+  That _ -> This ParserUncaught
 
 -- | Run a parser and return the remaining input and result as a tuple
 runParser :: Parser String Char a -> String -> (String, These () a)
 runParser p s = case CP.runParser p s of
   These a s' -> (s', These () a)
-  This a     -> ([], That a)
-  That s'    -> (s', This ())
+  This a -> ([], That a)
+  That s' -> (s', This ())
 
 runParser_ :: Parser String Char a -> String -> a
 runParser_ p s = case CP.runParser p s of
   These a _ -> a
-  This a    -> a
-  That _    -> error "Uncaught parse failure"
+  This a -> a
+  That _ -> error "Uncaught parse failure"

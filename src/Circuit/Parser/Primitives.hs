@@ -19,10 +19,10 @@ where
 
 import Circuit.Parser
 import Data.ByteString (ByteString)
-import Data.Char (ord)
+import Data.Char (isAsciiLower, isAsciiUpper, ord)
+import Data.Text qualified as T
 import Data.Text.Encoding
 import Data.Text.Encoding.Error
-import qualified Data.Text as T
 
 -- | Is the character an ASCII digit?
 isDigit :: Char -> Bool
@@ -30,7 +30,7 @@ isDigit c = c >= '0' && c <= '9'
 
 -- | Is the character a Latin letter?
 isLatinLetter :: Char -> Bool
-isLatinLetter c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+isLatinLetter c = isAsciiLower c || isAsciiUpper c
 
 -- | Parse a single digit.
 digit :: Parser ByteString Char Int
@@ -39,6 +39,7 @@ digit = (\c -> ord c - ord '0') <$> satisfy isDigit
 -- | Parse one or more digits, returning @(place, value)@ where @place@ is
 -- @10 ^ number_of_digits@.
 --
+-- >>> import Circuit.Parser (runParser)
 -- >>> runParser digits "123"
 -- These (1000,123) ""
 digits :: Parser ByteString Char (Int, Int)
@@ -71,7 +72,7 @@ signed p = do
   m <- optional (char '-')
   case m of
     Nothing -> p
-    Just _  -> negate <$> p
+    Just _ -> negate <$> p
 
 -- | Encode a 'String' as UTF-8 'ByteString'.
 strToUtf8 :: String -> ByteString
