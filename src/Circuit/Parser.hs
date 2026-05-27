@@ -72,6 +72,12 @@ module Circuit.Parser
     satisfyAscii,
     withOption,
     chainr,
+    count,
+    sepBy,
+    sepBy1,
+    try,
+    endOfInput,
+    lineEnd,
   )
 where
 
@@ -375,3 +381,70 @@ chainr :: (Uncons f s) => (a -> b -> b) -> Parser f s a -> Parser f s b -> Parse
 chainr f p z = go
   where
     go = (f <$> p <*> go) <|> z
+
+-- | Attempt a parser. If it fails with 'That', restore the original stream.
+-- Useful for backtracking over committed consumption (e.g., trying inline-line
+-- before bare-line).
+--
+-- >>> runParser (try (char 'a' >> char 'b')) "ac"
+-- That "ac"
+-- >>> runParser (try (char 'a' >> char 'b')) "ab"
+-- These 'b' ""
+try :: Parser f s a -> Parser f s a
+try p = Parser $ Lift $ \s ->
+  case runParser p s of
+    That _ -> That s
+    result -> result
+
+-- | Parse exactly @n@ occurrences of the given parser.
+--
+-- >>> runParser (count 3 (char 'a')) "aaabc"
+-- These "aaa" "bc"
+-- >>> runParser (count 3 (char 'a')) "aabc"
+-- That "aabc"
+count :: (Uncons f s) => Int -> Parser f s a -> Parser f s [a]
+count n p
+  | n <= 0 = pure []
+  | otherwise = (:) <$> p <*> count (n - 1) p
+
+-- | Parse zero or more occurrences separated by a separator.
+-- The separator is discarded.
+--
+-- >>> runParser (sepBy (char 'a') (char ',')) "a,a,a"
+-- These "aaa" ""
+-- >>> runParser (sepBy (char 'a') (char ',')) ""
+-- These "" ""
+sepBy :: (Uncons f s) => Parser f s a -> Parser f s b -> Parser f s [a]
+sepBy p sep = sepBy1 p sep <|> pure []
+
+-- | Parse one or more occurrences separated by a separator.
+-- The separator is discarded. Uses committing '>>=' so separator consumption
+-- is not backtracked.
+--
+-- >>> runParser (sepBy1 (char 'a') (char ',')) "a,a,a"
+-- These "aaa" ""
+-- >>> runParser (sepBy1 (char 'a') (char ',')) ""
+-- That ""
+sepBy1 :: (Uncons f s) => Parser f s a -> Parser f s b -> Parser f s [a]
+sepBy1 p sep = p >>= \x -> many (sep >> p) >>= \xs -> pure (x : xs)
+
+-- | Succeed only at the end of input. Returns unit.
+--
+-- >>> runParser endOfInput ""
+-- These () ""
+-- >>> runParser endOfInput "abc"
+-- That "abc"
+endOfInput :: (HasLength f, HasEmpty f) => Parser f s ()
+endOfInput = Parser $ Lift $ \f ->
+  if streamLength f == 0 then This () else That f
+
+-- | Match a newline character or succeed at end of input.
+-- Useful for line-oriented parsing where the last line
+-- may not have a trailing newline.
+--
+-- >>> runParser lineEnd "\nabc"
+-- These '\n' "abc"
+-- >>> runParser lineEnd ""
+-- These ' ' ""
+lineEnd :: (Uncons f Char, HasLength f, HasEmpty f) => Parser f Char Char
+lineEnd = char '\n' <|> (endOfInput *> pure ' ')
