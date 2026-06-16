@@ -15,25 +15,25 @@ main = do
   putStrLn $ "HTML5 spec (first " ++ show slice ++ " chars), " ++ show n ++ " runs"
 
   -- 1. many anyToken — consume every char into a list
-  (t1, _) <- times n (\s -> runParser (many anyToken) s) bs
+  (t1, _) <- times n (runParser (many anyToken)) bs
   let avg1 = fromIntegral (sum t1) / fromIntegral (length t1) :: Double
   putStrLn $ "many anyToken:           " ++ fmt avg1 slice
 
   -- 2. many (satisfy (const True))
-  (t2, _) <- times n (\s -> runParser (many (satisfy (const True))) s) bs
+  (t2, _) <- times n (runParser (many (satisfy (const True)))) bs
   let avg2 = fromIntegral (sum t2) / fromIntegral (length t2) :: Double
   putStrLn $ "many satisfy(const True): " ++ fmt avg2 slice
 
   -- 3. Alternation: letter <|> digit <|> punct
-  let isLetter c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-      isDigit c = c >= '0' && c <= '9'
+  let isLetter c = (isAsciiLower c) || (isAsciiUpper c)
+      isDigit c = isDigit c
       isPunct c = c `elem` (",.;:!?'\"-()[]{}@#$%&*+=<>/\\|~`" :: String)
-  (t3, _) <- times n (\s -> runParser (many (satisfy isLetter <|> satisfy isDigit <|> satisfy isPunct)) s) bs
+  (t3, _) <- times n (runParser (many (satisfy isLetter <|> satisfy isDigit <|> satisfy isPunct))) bs
   let avg3 = fromIntegral (sum t3) / fromIntegral (length t3) :: Double
   putStrLn $ "letter|digit|punct:      " ++ fmt avg3 slice
 
   -- 4. satisfy isLetter only
-  (t4, _) <- times n (\s -> runParser (many (satisfy isLetter)) s) bs
+  (t4, _) <- times n (runParser (many (satisfy isLetter))) bs
   let avg4 = fromIntegral (sum t4) / fromIntegral (length t4) :: Double
   putStrLn $ "many satisfy isLetter:   " ++ fmt avg4 slice
 

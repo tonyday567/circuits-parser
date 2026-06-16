@@ -1,5 +1,5 @@
 {-# LANGUAGE GHC2024 #-}
-{-# LANGUAGE OverloadedStrings #-}
+
 
 -- | Warning helpers for markup parsing.
 module Circuit.Markup.Warn

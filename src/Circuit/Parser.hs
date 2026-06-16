@@ -447,4 +447,4 @@ endOfInput = Parser $ Lift $ \f ->
 -- >>> runParser lineEnd ""
 -- These ' ' ""
 lineEnd :: (Uncons f Char, HasLength f, HasEmpty f) => Parser f Char Char
-lineEnd = char '\n' <|> (endOfInput *> pure ' ')
+lineEnd = char '\n' <|> (endOfInput Data.Functor.$> ' ')

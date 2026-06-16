@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
+
 {-# OPTIONS_GHC -Wno-x-partial #-}
 
 -- | Fast imperative lexers over "ByteString".
@@ -64,7 +64,7 @@ runWordLexerBS bs = go 0 False 0
   where
     !len = BS.length bs
     go !i !inWord !start
-      | i >= len = if inWord then [lowerSlice start (i - start)] else []
+      | i >= len = [lowerSlice start (i - start) | inWord]
       | otherwise =
           let !w = BSU.unsafeIndex bs i
            in if isAlphaW w

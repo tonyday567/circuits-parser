@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+
 
 -- | Bridge: the fast imperative Lexer → structured Markup Tokens.
 --

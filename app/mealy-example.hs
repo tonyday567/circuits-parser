@@ -52,7 +52,7 @@ main = do
 
   -- Parse a stream of comma-separated numbers and compute running avg
   let csv = C.pack "1.5,2.5,3.5,4.5,5.5"
-      nums = [n | Just n <- map parseDouble (C.split ',' csv)]
+      nums = Data.Maybe.catMaybes (map parseDouble (C.split ',' csv))
 
   putStrLn "=== parsed + avgC ==="
   print nums

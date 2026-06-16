@@ -1,5 +1,5 @@
 {-# LANGUAGE GHC2024 #-}
-{-# LANGUAGE OverloadedStrings #-}
+
 
 -- | A 'Markup' parser and printer of strict 'ByteString's focused on optimising performance. 'Markup' is a representation of data such as HTML, SVG or XML but the parsing is not always at standards.
 module Circuit.Markup
