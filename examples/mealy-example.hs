@@ -1,3 +1,5 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+
 -- | Example: Mealy machines as Circuits.
 --
 -- This demonstrates 'Circuit.Mealy' by building a stream processor
