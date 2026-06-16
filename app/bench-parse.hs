@@ -4,6 +4,7 @@ module Main where
 import Circuit.Parser (anyToken, many, runParser, satisfy, (<|>))
 import Circuit.Perf (times)
 import Data.ByteString qualified as B
+import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 
 main :: IO ()
 main = do
@@ -26,7 +27,6 @@ main = do
 
   -- 3. Alternation: letter <|> digit <|> punct
   let isLetter c = isAsciiLower c || isAsciiUpper c
-      isDigit c = c >= '0' && c <= '9'
       isPunct c = c `elem` (",.;:!?'\"-()[]{}@#$%&*+=<>/\\|~`" :: String)
   (t3, _) <- times n (runParser (many (satisfy isLetter <|> satisfy isDigit <|> satisfy isPunct))) bs
   let avg3 = fromIntegral (sum t3) / fromIntegral (length t3) :: Double
