@@ -149,7 +149,7 @@ bareLineP = do
   p <- opt (skipWhile (== ' ') *> tokensP)
   pure $ BareLine l (Data.Maybe.fromMaybe [] p)
   where
-    opt q = optional q
+    opt = optional
 
 lineP :: Parser String Char Line
 lineP = elabLineP <|> try inlineLineP <|> bareLineP
@@ -165,7 +165,7 @@ deckP = lineP >>= go []
       case next of
         Just l' -> go acc' l'
         Nothing -> pure (Deck (reverse acc'))
-    tryNext p = optional p
+    tryNext = optional
 
 -- Card: one or more decks separated by blank lines
 cardP :: Parser String Char Card
@@ -178,7 +178,7 @@ cardP = deckP >>= go []
         Just d' -> go acc' d'
         Nothing -> pure (Card (reverse acc'))
     blankSep = char '\n' >> char '\n' >> skipWhile (== '\n')
-    tryNext p = optional p
+    tryNext = optional
 
 -- Running
 

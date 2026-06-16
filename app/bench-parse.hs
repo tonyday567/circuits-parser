@@ -25,8 +25,8 @@ main = do
   putStrLn $ "many satisfy(const True): " ++ fmt avg2 slice
 
   -- 3. Alternation: letter <|> digit <|> punct
-  let isLetter c = (isAsciiLower c) || (isAsciiUpper c)
-      isDigit c = isDigit c
+  let isLetter c = isAsciiLower c || isAsciiUpper c
+      isDigit c = c >= '0' && c <= '9'
       isPunct c = c `elem` (",.;:!?'\"-()[]{}@#$%&*+=<>/\\|~`" :: String)
   (t3, _) <- times n (runParser (many (satisfy isLetter <|> satisfy isDigit <|> satisfy isPunct))) bs
   let avg3 = fromIntegral (sum t3) / fromIntegral (length t3) :: Double
