@@ -1,6 +1,12 @@
 packages:
   circuits-parser.cabal
-  ../circuits/circuits.cabal
-  ../circuits-meter/circuits-meter.cabal
+
+source-repository-package
+  type: git
+  location: https://github.com/tonyday567/circuits.git
+  branch: feat/circuits-0.2-cleanup
+
+constraints:
+  circuits >= 0.2
 
 write-ghc-environment-files: always
