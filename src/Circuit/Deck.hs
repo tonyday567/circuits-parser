@@ -29,6 +29,7 @@ import Circuit.Parser
     count,
     endOfInput,
     many,
+    optional,
     runParser,
     satisfy,
     skipWhile,
@@ -38,6 +39,7 @@ import Circuit.Parser
     (<|>),
   )
 import Data.Char (isAlpha, isAscii, isDigit)
+import Data.Maybe (fromMaybe)
 import Data.These (These (..))
 
 -- AST

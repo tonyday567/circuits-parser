@@ -32,7 +32,6 @@ module Circuit.Mealy
 where
 
 import Circuit
-import Data.List (scanl')
 import Prelude hiding (id, (.))
 
 #ifdef __GLASGOW_HASKELL__

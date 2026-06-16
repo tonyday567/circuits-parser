@@ -9,6 +9,7 @@ import Circuit.Parser (These (..), runParser)
 import Circuit.Parser.Primitives (double)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as C
+import Data.Maybe (mapMaybe)
 
 -- | Parse a comma-separated double.
 parseDouble :: ByteString -> Maybe Double
