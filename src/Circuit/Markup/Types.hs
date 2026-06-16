@@ -1,5 +1,4 @@
 {-# LANGUAGE GHC2024 #-}
-
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Types for markup parsing and rendering.

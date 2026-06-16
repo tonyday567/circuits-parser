@@ -3,7 +3,7 @@ module Main where
 
 import Circuit.Parser (anyToken, many, runParser, satisfy, (<|>))
 import Circuit.Perf (times)
-import Data.ByteString qualified as B
+import qualified Data.ByteString as B
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 
 main :: IO ()

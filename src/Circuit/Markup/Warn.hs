@@ -1,6 +1,5 @@
 {-# LANGUAGE GHC2024 #-}
 
-
 -- | Warning helpers for markup parsing.
 module Circuit.Markup.Warn
   ( warnError,

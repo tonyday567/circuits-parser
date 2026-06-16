@@ -83,8 +83,8 @@ where
 
 import Circuit (Circuit (..), reify)
 import Control.Monad (void)
-import Data.Functor (($>))
 import Data.ByteString qualified as B
+import Data.Functor (($>))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.These (These (..))

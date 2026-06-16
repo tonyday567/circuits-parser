@@ -1,5 +1,3 @@
-
-
 -- | Bridge: the fast imperative Lexer → structured Markup Tokens.
 --
 -- The Lexer ('Circuit.Parser.Lexer') produces a flat stream of
