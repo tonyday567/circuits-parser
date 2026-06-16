@@ -321,7 +321,7 @@ empty = Parser $ Lift $ \s -> That s
 
 infixl 3 <|>
 
-(Parser p1) <|> (Parser p2) = Parser $ Knot body
+(Parser p1) <|> (Parser p2) = Parser $ Knot (Lift body)
   where
     body (Right s) = case reify p1 s of
       This a -> Right (This a)
@@ -426,12 +426,12 @@ sepBy p sep = sepBy1 p sep <|> pure []
 -- >>> runParser (sepBy1 (char 'a') (char ',')) ""
 -- That ""
 sepBy1 :: (Uncons f s) => Parser f s a -> Parser f s b -> Parser f s [a]
-sepBy1 p sep = p >>= \x -> many (sep >> p) >>= \xs -> pure (x : xs)
+sepBy1 p sep = p >>= \x -> many (try (sep >> p)) >>= \xs -> pure (x : xs)
 
 -- | Succeed only at the end of input. Returns unit.
 --
 -- >>> runParser endOfInput ""
--- These () ""
+-- This ()
 -- >>> runParser endOfInput "abc"
 -- That "abc"
 endOfInput :: (HasLength f, HasEmpty f) => Parser f s ()

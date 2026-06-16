@@ -28,7 +28,7 @@ module Circuit.Parser.Token
   ) where
 
 import Circuit.Parser (Parser (..), These (..), Uncons (..), char, satisfy, some, (<|>), runParser)
-import Data.Char (isAsciiLower, isAsciiUpper)
+import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Foldable (toList)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -52,7 +52,7 @@ letter :: Uncons f Char => Parser f Char Char
 letter = lowerLetter <|> upperLetter
 
 digit :: Uncons f Char => Parser f Char Char
-digit = satisfy (\c -> c >= '0' && c <= '9')
+digit = satisfy isDigit
 
 word :: Uncons f Char => Parser f Char [Char]
 word = some letter

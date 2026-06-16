@@ -19,6 +19,10 @@ module Circuit.Markup.Tree
     elementc,
     contentRaw,
     addAttrs,
+    Standard (..),
+    Token (..),
+    Markup (..),
+    OpenTagType (..),
   )
 where
 
@@ -37,6 +41,7 @@ import Data.Tree
 
 -- $setup
 -- >>> :set -XOverloadedStrings
+-- >>> import Data.Tree
 
 -- | Append attributes to an existing Token attribute list. Returns Nothing for tokens that do not have attributes.
 addAttrs :: [Attr] -> Token -> Maybe Token

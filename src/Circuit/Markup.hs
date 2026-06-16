@@ -176,5 +176,5 @@ import Data.Tree (Tree (..))
 -- | Create a Markup element from a bytestring, not escaping the usual characters.
 --
 -- >>> markup_ Html $ markdown_ Compact Html $ contentRaw "<content>"
--- Markup {elements = *** Exception: UnclosedTag
+-- *** Exception: UnclosedTag
 -- ...

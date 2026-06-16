@@ -10,6 +10,9 @@ module Circuit.Markup.Render
     escapeChar,
     escape,
     content,
+    Standard (..),
+    Token (..),
+    OpenTagType (..),
   )
 where
 

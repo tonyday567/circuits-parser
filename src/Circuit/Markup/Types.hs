@@ -143,4 +143,4 @@ newtype TokenParser e a = TokenParser {runTP :: [Token] -> ([Token], These e a)}
 type Element = Tree Token
 
 -- | @Indented 0@ puts newlines in between the tags.
-data RenderStyle = Compact | Indented Int deriving (Eq, Ord, Show, Generic, Data)
+data RenderStyle = Compact | Indented Int deriving (Eq, Ord, Show, Read, Generic, Data)
