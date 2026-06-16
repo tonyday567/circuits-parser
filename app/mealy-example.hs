@@ -5,10 +5,10 @@
 module Main where
 
 import Circuit.Mealy
-import Circuit.Parser (runParser, These (..))
+import Circuit.Parser (These (..), runParser)
 import Circuit.Parser.Primitives (double)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as C
+import Data.ByteString.Char8 qualified as C
 
 -- | Parse a comma-separated double.
 parseDouble :: ByteString -> Maybe Double

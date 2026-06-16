@@ -24,8 +24,8 @@ import Data.Bifunctor
 import Data.Bool
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as B
-import Data.Tree
 import Data.These
+import Data.Tree
 
 -- $setup
 -- >>> :set -XOverloadedStrings

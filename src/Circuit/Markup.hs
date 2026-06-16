@@ -8,8 +8,10 @@ module Circuit.Markup
     module Circuit.Markup.Render,
     module Circuit.Markup.Tree,
     module Circuit.Markup.Warn,
+
     -- * parsing
     Parser,
+
     -- * Tree support
     Tree (..),
   )

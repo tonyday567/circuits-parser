@@ -1,9 +1,9 @@
 -- Benchmark: Circuit.Parser character consumption throughput
 module Main where
 
-import Circuit.Parser (runParser, satisfy, anyToken, many, (<|>))
+import Circuit.Parser (anyToken, many, runParser, satisfy, (<|>))
 import Circuit.Perf (times)
-import qualified Data.ByteString as B
+import Data.ByteString qualified as B
 
 main :: IO ()
 main = do
@@ -39,5 +39,7 @@ main = do
 
 fmt :: Double -> Int -> String
 fmt avg chars =
-  show (round (avg / 1e3)) ++ " us, " ++
-  show (fromIntegral (round (avg / fromIntegral chars)) :: Double) ++ " ns/char"
+  show (round (avg / 1e3))
+    ++ " us, "
+    ++ show (fromIntegral (round (avg / fromIntegral chars)) :: Double)
+    ++ " ns/char"

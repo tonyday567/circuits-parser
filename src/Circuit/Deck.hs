@@ -24,26 +24,31 @@ where
 
 import Circuit.Parser
   ( Parser,
+    asThese,
     char,
     count,
     endOfInput,
     many,
+    runParser,
     satisfy,
     skipWhile,
     some,
     string,
     try,
     (<|>),
-    runParser,
-    asThese,
   )
-import Data.These (These (..))
 import Data.Char (isAlpha, isAscii, isDigit)
+import Data.These (These (..))
 
 -- AST
 
 data Token
-  = Word String | Symbol String | Mark String | Emoji String | Quoted String | Punct String
+  = Word String
+  | Symbol String
+  | Mark String
+  | Emoji String
+  | Quoted String
+  | Punct String
   deriving (Show, Eq)
 
 newtype Dash = Dash Token deriving (Show, Eq)
@@ -55,6 +60,7 @@ data Line
   deriving (Show, Eq)
 
 newtype Deck = Deck {deckLines :: [Line]} deriving (Show, Eq)
+
 newtype Card = Card {cardDecks :: [Deck]} deriving (Show, Eq)
 
 -- Token parsers
@@ -70,12 +76,20 @@ wordP = Word <$> some (satisfy wordChar)
 
 emojiP :: Parser String Char Token
 emojiP = Emoji <$> some (satisfy (\c -> not (isAscii c) && not (isMathSym c)))
-  where isMathSym c = c `elem` ("\x27DC\x27DD\x27E1\x21C4\x22B2\x29C8\x2192" :: String)
+  where
+    isMathSym c = c `elem` ("\x27DC\x27DD\x27E1\x21C4\x22B2\x29C8\x2192" :: String)
 
 markP = Mark <$> (string "\x27DC" <|> string "\x27DD")
 
-symbolP = Symbol <$> (string "\x27E1" <|> string "\x21C4" <|> string "\x22B2"
-                   <|> string "\x29C8" <|> string "\x2192" <|> string "\x2026")
+symbolP =
+  Symbol
+    <$> ( string "\x27E1"
+            <|> string "\x21C4"
+            <|> string "\x22B2"
+            <|> string "\x29C8"
+            <|> string "\x2192"
+            <|> string "\x2026"
+        )
 
 quotedP = Quoted <$> (char '"' *> many (satisfy (/= '"')) <* char '"')
 
@@ -101,9 +115,15 @@ rest p first = go [first]
 -- Dash
 
 dashP :: Parser String Char Dash
-dashP = Dash <$> (Mark <$> (string "\x27DC" <|> string "\x27DD")
-              <|> Punct <$> (string "-" <|> string "*")
-              <|> Symbol <$> string "\x2192")
+dashP =
+  Dash
+    <$> ( Mark
+            <$> (string "\x27DC" <|> string "\x27DD")
+              <|> Punct
+            <$> (string "-" <|> string "*")
+              <|> Symbol
+            <$> string "\x2192"
+        )
 
 -- Line parsers
 
@@ -130,7 +150,8 @@ bareLineP = do
   l <- tokensP
   p <- opt (skipWhile (== ' ') *> tokensP)
   pure $ BareLine l (maybe [] id p)
-  where opt q = (Just <$> q) <|> pure Nothing
+  where
+    opt q = (Just <$> q) <|> pure Nothing
 
 lineP :: Parser String Char Line
 lineP = elabLineP <|> try inlineLineP <|> bareLineP

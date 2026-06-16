@@ -20,6 +20,7 @@ module Circuit.Markup.Parse
     ws_,
     doctypeHtml,
     doctypeXml,
+
     -- * Internal parsers
     tokenHtmlP,
     tokenXmlP,

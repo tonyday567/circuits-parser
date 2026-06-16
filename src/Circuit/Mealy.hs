@@ -28,7 +28,6 @@ module Circuit.Mealy
     secondC,
     swapC,
     dupC,
-
   )
 where
 
@@ -125,5 +124,3 @@ swapC = MealyC $ Lift $ \(s, (a, b)) -> (s, (b, a))
 -- | Duplicate an input (stateless).
 dupC :: MealyC s a (a, a)
 dupC = MealyC $ Lift $ \(s, a) -> (s, (a, a))
-
-

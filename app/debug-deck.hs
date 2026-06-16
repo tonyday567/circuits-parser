@@ -1,7 +1,8 @@
 module Main where
-import Circuit.Deck (elabLineP, inlineLineP, bareLineP, lineP)
+
+import Circuit.Deck (bareLineP, elabLineP, inlineLineP, lineP)
 import Circuit.Parser (runParser, (<|>))
-import Data.These (These(..))
+import Data.These (These (..))
 
 main = do
   let input = "first \x27E1 lead\n  \x27DC elab\n" :: String
