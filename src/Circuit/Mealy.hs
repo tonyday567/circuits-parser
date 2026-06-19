@@ -1,18 +1,18 @@
 {-# LANGUAGE CPP #-}
 
--- | Mealy machines as 'Circuit's with explicit state threading.
+-- | Mealy machines as 'Trace's with explicit state threading.
 --
 -- A 'Data.Mealy.Mealy' is a state machine @(inject, step, extract)@
 -- where the state type is existentially hidden. By exposing the state
--- in the 'Circuit' tensor, we get:
+-- in the 'Trace' tensor, we get:
 --
 --   * Composition where state threading is visible in types
---   * Access to 'Circuit''s 'Knot' for internal feedback
+--   * Access to 'Trace' for internal feedback
 --   * Reuse of 'reify' and 'ambient' machinery
 --
 -- The key observation: a single step of a Mealy machine is a plain
--- function @(s, a) -> (s, b)@. A 'Circuit' over @(,)@ composes these
--- steps, and 'scanC' iterates the resulting circuit over a stream.
+-- function @(s, a) -> (s, b)@. A 'Trace' over @(,)@ composes these
+-- steps, and 'scanC' iterates the resulting trace over a stream.
 module Circuit.Mealy
   ( -- * Mealy as Circuit
     MealyC (..),
@@ -31,7 +31,7 @@ module Circuit.Mealy
   )
 where
 
-import Circuit
+import Circuit (Trace (..), reify)
 import Prelude hiding (id, (.))
 
 #ifdef __GLASGOW_HASKELL__
@@ -42,13 +42,13 @@ import Data.Profunctor
 import Circuit.Classes
 #endif
 
--- | A Mealy machine with explicit state @s@, expressed as a 'Circuit'
+-- | A Mealy machine with explicit state @s@, expressed as a 'Trace'
 -- over the cartesian tensor.
 --
 -- @MealyC s a b@ threads state @s@ through a computation that maps
 -- input @a@ to output @b@. Composition chains state through both
 -- stages.
-newtype MealyC s a b = MealyC {unMealyC :: Circuit (->) (,) (s, a) (s, b)}
+newtype MealyC s a b = MealyC {unMealyC :: Trace (,) (->) (s, a) (s, b)}
 
 -- | Lift a plain step function into a 'MealyC'.
 --

@@ -81,7 +81,7 @@ module Circuit.Parser
   )
 where
 
-import Circuit (Circuit (..), reify)
+import Circuit (Trace (..), reify)
 import Control.Monad (void)
 import Data.ByteString qualified as B
 import Data.Functor (($>))
@@ -118,7 +118,7 @@ class (HasEmpty f) => Uncons f s where
   uncons :: f -> These s f
 
 newtype Parser f s a = Parser
-  { unParser :: Circuit (->) Either f (These a f)
+  { unParser :: Trace Either (->) f (These a f)
   }
 
 -- | Run a parser on a stream, returning the 'These' result.
@@ -322,7 +322,7 @@ empty = Parser $ Lift $ \s -> That s
 
 infixl 3 <|>
 
-(Parser p1) <|> (Parser p2) = Parser $ Knot (Lift body)
+(Parser p1) <|> (Parser p2) = Parser $ Trace (Lift body)
   where
     body (Right s) = case reify p1 s of
       This a -> Right (This a)

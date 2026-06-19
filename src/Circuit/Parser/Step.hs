@@ -8,7 +8,7 @@
 --   'Offer' a f  — partial. consumed to f, result handed to next alternative.
 module Circuit.Parser.Step where
 
-import Circuit (Circuit (..), reify)
+import Circuit (Trace (..), reify)
 import Control.Applicative (Alternative (..))
 import Data.These (These (..))
 
@@ -17,7 +17,7 @@ data Step a f = Yield a f | Halt f | Offer a f
   deriving (Show, Eq)
 
 -- | Parser wrapping a Circuit.
-newtype Parser f s a = Parser {unParser :: Circuit (->) Either f (Step a f)}
+newtype Parser f s a = Parser {unParser :: Trace Either (->) f (Step a f)}
 
 -- | Run a parser (same pattern as Circuit.Parser.runParser).
 run :: Parser f s a -> f -> Step a f
