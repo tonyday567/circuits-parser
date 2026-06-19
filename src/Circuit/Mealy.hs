@@ -8,7 +8,7 @@
 --
 --   * Composition where state threading is visible in types
 --   * Access to 'Trace' for internal feedback
---   * Reuse of 'reify' and 'ambient' machinery
+--   * Reuse of 'realise' and 'ambient' machinery
 --
 -- The key observation: a single step of a Mealy machine is a plain
 -- function @(s, a) -> (s, b)@. A 'Trace' over @(,)@ composes these
@@ -31,7 +31,7 @@ module Circuit.Mealy
   )
 where
 
-import Circuit (Trace (..), reify)
+import Circuit (Trace (..), realise)
 import Prelude hiding (id, (.))
 
 #ifdef __GLASGOW_HASKELL__
@@ -72,7 +72,7 @@ fromMealy inject step extract = (inject, fromStep step extract)
 -- [1,3,6]
 scanC :: MealyC s a b -> s -> [a] -> [b]
 scanC (MealyC c) s0 as =
-  let f = reify c
+  let f = realise c
       go _ [] = []
       go s (a : as') = let (s', b) = f (s, a) in b : go s' as'
    in go s0 as
@@ -82,7 +82,7 @@ scanC (MealyC c) s0 as =
 -- Throws an error on empty lists (mirrors 'Data.Mealy.fold').
 foldC :: MealyC s a b -> s -> [a] -> b
 foldC (MealyC c) s0 as =
-  let f = reify c
+  let f = realise c
    in case as of
         [] -> error "foldC: empty list"
         (a : as') -> snd $ foldl (\(s, _) a' -> f (s, a')) (f (s0, a)) as'
@@ -107,13 +107,13 @@ instance Profunctor (MealyC s) where
 -- same state through both.
 firstC :: MealyC s a b -> MealyC s (a, c) (b, c)
 firstC (MealyC c) = MealyC $ Lift $ \(s, (a, x)) ->
-  let (s', b) = reify c (s, a)
+  let (s', b) = realise c (s, a)
    in (s', (b, x))
 
 -- | Apply a circuit to the second component of a pair.
 secondC :: MealyC s a b -> MealyC s (c, a) (c, b)
 secondC (MealyC c) = MealyC $ Lift $ \(s, (x, a)) ->
-  let (s', b) = reify c (s, a)
+  let (s', b) = realise c (s, a)
    in (s', (x, b))
 
 -- | Swap the two components of a pair (stateless).

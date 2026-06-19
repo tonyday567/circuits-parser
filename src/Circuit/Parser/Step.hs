@@ -8,7 +8,7 @@
 --   'Offer' a f  — partial. consumed to f, result handed to next alternative.
 module Circuit.Parser.Step where
 
-import Circuit (Trace (..), reify)
+import Circuit (Trace (..), realise)
 import Control.Applicative (Alternative (..))
 import Data.These (These (..))
 
@@ -21,12 +21,12 @@ newtype Parser f s a = Parser {unParser :: Trace Either (->) f (Step a f)}
 
 -- | Run a parser (same pattern as Circuit.Parser.runParser).
 run :: Parser f s a -> f -> Step a f
-run = reify . unParser
+run = realise . unParser
 
 -- | Commit: turn all offers into yields (attoparsec mode).
 commit :: Parser f s a -> Parser f s a
 commit (Parser p) = Parser $ Lift $ \s ->
-  case reify p s of
+  case realise p s of
     Offer a f -> Yield a f
     other -> other
 
@@ -60,7 +60,7 @@ offer a = Parser $ Lift $ \f -> Offer a f
 
 instance Functor (Parser f s) where
   fmap f (Parser p) = Parser $ Lift $ \s ->
-    case reify p s of
+    case realise p s of
       Yield a s' -> Yield (f a) s'
       Halt s' -> Halt s'
       Offer a s' -> Offer (f a) s'

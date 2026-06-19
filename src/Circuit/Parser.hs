@@ -81,7 +81,7 @@ module Circuit.Parser
   )
 where
 
-import Circuit (Trace (..), reify)
+import Circuit (Trace (..), realise)
 import Control.Monad (void)
 import Data.ByteString qualified as B
 import Data.Functor (($>))
@@ -123,7 +123,7 @@ newtype Parser f s a = Parser
 
 -- | Run a parser on a stream, returning the 'These' result.
 runParser :: Parser f s a -> f -> These a f
-runParser = reify . unParser
+runParser = realise . unParser
 
 instance Uncons [a] a where
   uncons [] = That []
@@ -187,7 +187,7 @@ string = traverse char
 -- | Keep only successes matching the predicate.
 filterP :: (Uncons f s) => Parser f s a -> (a -> Bool) -> Parser f s a
 filterP (Parser p) f = Parser $ Lift $ \s ->
-  case reify p s of
+  case realise p s of
     This a
       | f a -> This a
       | otherwise -> That s
@@ -255,7 +255,7 @@ runParserError p f = asThese (runParser p f)
 
 instance Functor (Parser f s) where
   fmap f (Parser p) = Parser $ Lift $ \s ->
-    case reify p s of
+    case realise p s of
       This a -> This (f a)
       That s' -> That s'
       These a s' -> These (f a) s'
@@ -263,10 +263,10 @@ instance Functor (Parser f s) where
 instance (Uncons f s) => Applicative (Parser f s) where
   pure a = Parser $ Lift $ \f -> These a f
   Parser pf <*> Parser pa = Parser $ Lift $ \s ->
-    case reify pf s of
+    case realise pf s of
       This f ->
         This f
-          `thenThese` ( \_ s' -> case reify pa s' of
+          `thenThese` ( \_ s' -> case realise pa s' of
                           This a' -> This (f a')
                           That _ -> That s
                           These a' s''' -> These (f a') s'''
@@ -274,36 +274,36 @@ instance (Uncons f s) => Applicative (Parser f s) where
       That s' -> That s'
       These f s' ->
         These f s'
-          `thenThese` ( \_ s'' -> case reify pa s'' of
+          `thenThese` ( \_ s'' -> case realise pa s'' of
                           This a' -> This (f a')
                           That _ -> That s
                           These a' s''' -> These (f a') s'''
                       )
   Parser p1 *> Parser p2 = Parser $ Lift $ \s ->
-    case reify p1 s of
-      This _ -> reify p2 emptyF
+    case realise p1 s of
+      This _ -> realise p2 emptyF
       That s' -> That s'
-      These _ s' -> case reify p2 s' of
+      These _ s' -> case realise p2 s' of
         That _ -> That s
         result -> result
   Parser p1 <* Parser p2 = Parser $ Lift $ \s ->
-    case reify p1 s of
-      This a -> case reify p2 emptyF of
+    case realise p1 s of
+      This a -> case realise p2 emptyF of
         This _ -> This a
         That _ -> That s
         These _ s'' -> These a s''
       That s' -> That s'
-      These a s' -> case reify p2 s' of
+      These a s' -> case realise p2 s' of
         This _ -> This a
         That _ -> That s
         These _ s'' -> These a s''
 
 instance (Uncons f s) => Monad (Parser f s) where
   Parser m >>= k = Parser $ Lift $ \s ->
-    case reify m s of
-      This a -> reify (let Parser p = k a in p) emptyF
+    case realise m s of
+      This a -> realise (let Parser p = k a in p) emptyF
       That s' -> That s'
-      These a s' -> reify (let Parser p = k a in p) s'
+      These a s' -> realise (let Parser p = k a in p) s'
 
 -- | A parser that always fails (consumes nothing).
 --
@@ -324,11 +324,11 @@ infixl 3 <|>
 
 (Parser p1) <|> (Parser p2) = Parser $ Trace (Lift body)
   where
-    body (Right s) = case reify p1 s of
+    body (Right s) = case realise p1 s of
       This a -> Right (This a)
       That s' -> Left s'
       These a s' -> Right (These a s')
-    body (Left s) = case reify p2 s of
+    body (Left s) = case realise p2 s of
       result -> Right result
 
 -- | Skip zero or more elements matching the predicate.
