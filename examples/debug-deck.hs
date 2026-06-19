@@ -2,8 +2,8 @@ module Main where
 
 import Circuit.Deck (bareLineP, elabLineP, inlineLineP, lineP)
 import Circuit.Parser (runParser, (<|>))
-import Data.These (These (..))
 
+main :: IO ()
 main = do
   let input = "first \x27E1 lead\n  \x27DC elab\n" :: String
   putStrLn "=== elabLineP ==="
