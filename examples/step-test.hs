@@ -13,22 +13,22 @@ pOffer = char 'a' >> offer "got-a"
 main :: IO ()
 main = do
   putStrLn "=== char 'a' on \"abc\" ==="
-  print $ run pA "abc"
+  print $ runStep pA "abc"
 
   putStrLn "=== char 'a' on \"xyz\" ==="
-  print $ run pA "xyz"
+  print $ runStep pA "xyz"
 
   putStrLn "=== char 'a' >> char 'b' on \"ax\" ==="
-  print $ run pAb "ax"
+  print $ runStep pAb "ax"
 
   putStrLn "=== pB <|> pA on \"abc\" ==="
-  print $ run (pB <|> pA) "abc"
+  print $ runStep (pB <|> pA) "abc"
 
   putStrLn "=== pAb <|> pA on \"ax\" ==="
-  print $ run (pAb <|> pA) "ax"
+  print $ runStep (pAb <|> pA) "ax"
 
   putStrLn "=== (pOffer >> pB) on \"ab\" ==="
-  print $ run (pOffer >> pB) "ab"
+  print $ runStep (pOffer >> pB) "ab"
 
 ($>) :: (Functor f) => f a -> b -> f b
 ($>) = flip (<$)
