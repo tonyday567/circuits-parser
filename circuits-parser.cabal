@@ -1,6 +1,11 @@
 cabal-version: 3.0
 name: circuits-parser
 version: 0.1.0.0
+synopsis: Parser and markup libraries for the circuits ecosystem
+description:
+  A parser combinator library built on Circuit, together with deck and markup
+  parsers for the circuits ecosystem.
+
 license: BSD-3-Clause
 author: Tony Day
 maintainer: tonyday567@gmail.com
@@ -8,96 +13,40 @@ category: parsing
 build-type: Simple
 tested-with: ghc ==9.14.1
 
+source-repository head
+  type: git
+  location: https://github.com/tonyday567/circuits-parser.git
+
 library
   exposed-modules:
     Circuit.Deck
     Circuit.Markup
-    Circuit.Markup.Types
     Circuit.Markup.Parse
     Circuit.Markup.Render
     Circuit.Markup.Tree
+    Circuit.Markup.Types
     Circuit.Markup.Warn
     Circuit.Mealy
     Circuit.Parser
     Circuit.Parser.Lexer
     Circuit.Parser.Primitives
-    Circuit.Parser.Token
     Circuit.Parser.Step
+    Circuit.Parser.Token
 
   build-depends:
     base >=4.20 && <5,
-    bytestring,
-    circuits,
-    clock >=0.8 && <0.9,
-    containers,
-    deepseq,
-    harpie,
-    prettyprinter,
-    profunctors,
-    text,
-    these,
+    bytestring >=0.12.2 && <0.13,
+    circuits >=0.2 && <0.3,
+    containers >=0.8 && <0.9,
+    deepseq >=1.5.1 && <1.6,
+    harpie >=0.2 && <0.3,
+    prettyprinter >=1.7.2 && <1.8,
+    profunctors >=5.6.3 && <5.7,
+    text >=2.1.3 && <2.2,
+    these >=1.2.1 && <1.3,
 
   hs-source-dirs: src
   default-language: GHC2024
   ghc-options:
     -Wall
     -Wcompat
-
-executable step-test
-  main-is: step-test.hs
-  build-depends:
-    base >=4.20 && <5,
-    circuits-parser,
-  hs-source-dirs: app
-  default-language: GHC2024
-
-executable debug-deck
-  main-is: debug-deck.hs
-  build-depends:
-    base >=4.20 && <5,
-    circuits-parser,
-    these,
-  hs-source-dirs: app
-  default-language: GHC2024
-
-executable deck-test
-  main-is: deck-test.hs
-  build-depends:
-    base >=4.20 && <5,
-    circuits-parser,
-  hs-source-dirs: app
-  default-language: GHC2024
-  ghc-options:
-    -Wall
-    -Wcompat
-
-executable mealy-example
-  main-is: mealy-example.hs
-  build-depends:
-    base >=4.20 && <5,
-    bytestring,
-    circuits-parser,
-
-  hs-source-dirs: app
-  default-language: GHC2024
-  ghc-options:
-    -Wall
-    -Wcompat
-
-benchmark parse-bench
-  type: exitcode-stdio-1.0
-  main-is: bench-parse.hs
-  build-depends:
-    base >=4.20 && <5,
-    bytestring,
-    circuits-parser,
-    circuits-perf,
-    text,
-
-  hs-source-dirs: app
-  default-language: GHC2024
-  ghc-options:
-    -Wall
-    -Wcompat
-    -O2
-    -threaded

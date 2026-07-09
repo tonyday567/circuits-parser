@@ -29,6 +29,7 @@ import Circuit.Parser
     count,
     endOfInput,
     many,
+    optional,
     runParser,
     satisfy,
     skipWhile,
@@ -38,6 +39,7 @@ import Circuit.Parser
     (<|>),
   )
 import Data.Char (isAlpha, isAscii, isDigit)
+import Data.Maybe (fromMaybe)
 import Data.These (These (..))
 
 -- AST
@@ -79,8 +81,10 @@ emojiP = Emoji <$> some (satisfy (\c -> not (isAscii c) && not (isMathSym c)))
   where
     isMathSym c = c `elem` ("\x27DC\x27DD\x27E1\x21C4\x22B2\x29C8\x2192" :: String)
 
+markP :: Parser String Char Token
 markP = Mark <$> (string "\x27DC" <|> string "\x27DD")
 
+symbolP :: Parser String Char Token
 symbolP =
   Symbol
     <$> ( string "\x27E1"
@@ -91,8 +95,10 @@ symbolP =
             <|> string "\x2026"
         )
 
+quotedP :: Parser String Char Token
 quotedP = Quoted <$> (char '"' *> many (satisfy (/= '"')) <* char '"')
 
+punctP :: Parser String Char Token
 punctP = Punct <$> (string ":" <|> string ";" <|> string "," <|> string "(" <|> string ")")
 
 -- Token sequence: first token, then zero or more (space+ token).

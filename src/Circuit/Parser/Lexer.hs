@@ -1,6 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
-
 {-# OPTIONS_GHC -Wno-x-partial #-}
 
 -- | Fast imperative lexers over "ByteString".

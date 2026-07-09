@@ -1,18 +1,18 @@
 {-# LANGUAGE CPP #-}
 
--- | Mealy machines as 'Circuit's with explicit state threading.
+-- | Mealy machines as 'Trace's with explicit state threading.
 --
 -- A 'Data.Mealy.Mealy' is a state machine @(inject, step, extract)@
 -- where the state type is existentially hidden. By exposing the state
--- in the 'Circuit' tensor, we get:
+-- in the 'Trace' tensor, we get:
 --
 --   * Composition where state threading is visible in types
---   * Access to 'Circuit''s 'Knot' for internal feedback
---   * Reuse of 'reify' and 'ambient' machinery
+--   * Access to 'Trace' for internal feedback
+--   * Reuse of 'run' and 'ambient' machinery
 --
 -- The key observation: a single step of a Mealy machine is a plain
--- function @(s, a) -> (s, b)@. A 'Circuit' over @(,)@ composes these
--- steps, and 'scanC' iterates the resulting circuit over a stream.
+-- function @(s, a) -> (s, b)@. A 'Trace' over @(,)@ composes these
+-- steps, and 'scanC' iterates the resulting trace over a stream.
 module Circuit.Mealy
   ( -- * Mealy as Circuit
     MealyC (..),
@@ -31,8 +31,7 @@ module Circuit.Mealy
   )
 where
 
-import Circuit
-import Data.List (scanl')
+import Circuit (Trace (..), run)
 import Prelude hiding (id, (.))
 
 #ifdef __GLASGOW_HASKELL__
@@ -43,20 +42,20 @@ import Data.Profunctor
 import Circuit.Classes
 #endif
 
--- | A Mealy machine with explicit state @s@, expressed as a 'Circuit'
+-- | A Mealy machine with explicit state @s@, expressed as a 'Trace'
 -- over the cartesian tensor.
 --
 -- @MealyC s a b@ threads state @s@ through a computation that maps
 -- input @a@ to output @b@. Composition chains state through both
 -- stages.
-newtype MealyC s a b = MealyC {unMealyC :: Circuit (->) (,) (s, a) (s, b)}
+newtype MealyC s a b = MealyC {unMealyC :: Trace (,) (->) (s, a) (s, b)}
 
--- | Lift a plain step function into a 'MealyC'.
+-- | Arr a plain step function into a 'MealyC'.
 --
 -- @fromStep step extract@ creates a circuit where each input updates
 -- the state and produces an output.
 fromStep :: (s -> a -> s) -> (s -> b) -> MealyC s a b
-fromStep step extract = MealyC $ Lift $ \(s, a) -> let s' = step s a in (s', extract s')
+fromStep step extract = MealyC $ Arr $ \(s, a) -> let s' = step s a in (s', extract s')
 
 -- | Convert a 'Data.Mealy.Mealy' to a 'MealyC', returning the inject
 -- function separately.
@@ -73,7 +72,7 @@ fromMealy inject step extract = (inject, fromStep step extract)
 -- [1,3,6]
 scanC :: MealyC s a b -> s -> [a] -> [b]
 scanC (MealyC c) s0 as =
-  let f = reify c
+  let f = run c
       go _ [] = []
       go s (a : as') = let (s', b) = f (s, a) in b : go s' as'
    in go s0 as
@@ -83,7 +82,7 @@ scanC (MealyC c) s0 as =
 -- Throws an error on empty lists (mirrors 'Data.Mealy.fold').
 foldC :: MealyC s a b -> s -> [a] -> b
 foldC (MealyC c) s0 as =
-  let f = reify c
+  let f = run c
    in case as of
         [] -> error "foldC: empty list"
         (a : as') -> snd $ foldl (\(s, _) a' -> f (s, a')) (f (s0, a)) as'
@@ -107,20 +106,20 @@ instance Profunctor (MealyC s) where
 -- | Apply a circuit to the first component of a pair, threading the
 -- same state through both.
 firstC :: MealyC s a b -> MealyC s (a, c) (b, c)
-firstC (MealyC c) = MealyC $ Lift $ \(s, (a, x)) ->
-  let (s', b) = reify c (s, a)
+firstC (MealyC c) = MealyC $ Arr $ \(s, (a, x)) ->
+  let (s', b) = run c (s, a)
    in (s', (b, x))
 
 -- | Apply a circuit to the second component of a pair.
 secondC :: MealyC s a b -> MealyC s (c, a) (c, b)
-secondC (MealyC c) = MealyC $ Lift $ \(s, (x, a)) ->
-  let (s', b) = reify c (s, a)
+secondC (MealyC c) = MealyC $ Arr $ \(s, (x, a)) ->
+  let (s', b) = run c (s, a)
    in (s', (x, b))
 
 -- | Swap the two components of a pair (stateless).
 swapC :: MealyC s (a, b) (b, a)
-swapC = MealyC $ Lift $ \(s, (a, b)) -> (s, (b, a))
+swapC = MealyC $ Arr $ \(s, (a, b)) -> (s, (b, a))
 
 -- | Duplicate an input (stateless).
 dupC :: MealyC s a (a, a)
-dupC = MealyC $ Lift $ \(s, a) -> (s, (a, a))
+dupC = MealyC $ Arr $ \(s, a) -> (s, (a, a))

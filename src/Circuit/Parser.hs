@@ -81,9 +81,10 @@ module Circuit.Parser
   )
 where
 
-import Circuit (Circuit (..), reify)
+import Circuit (Trace (..), run)
 import Control.Monad (void)
 import Data.ByteString qualified as B
+import Data.Functor (($>))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.These (These (..))
@@ -117,12 +118,12 @@ class (HasEmpty f) => Uncons f s where
   uncons :: f -> These s f
 
 newtype Parser f s a = Parser
-  { unParser :: Circuit (->) Either f (These a f)
+  { unParser :: Trace Either (->) f (These a f)
   }
 
 -- | Run a parser on a stream, returning the 'These' result.
 runParser :: Parser f s a -> f -> These a f
-runParser = reify . unParser
+runParser = run . unParser
 
 instance Uncons [a] a where
   uncons [] = That []
@@ -150,7 +151,7 @@ instance Uncons Text Char where
 -- runParser anyToken \"\" = That \"\"
 -- @
 anyToken :: (Uncons f s) => Parser f s s
-anyToken = Parser $ Lift $ \f -> case uncons f of
+anyToken = Parser $ Arr $ \f -> case uncons f of
   That _ -> That f
   These s f' -> These s f'
   This _ -> That f
@@ -162,7 +163,7 @@ anyToken = Parser $ Lift $ \f -> case uncons f of
 -- >>> runParser (satisfy (> 'a')) "abc"
 -- That "abc"
 satisfy :: (Uncons f s) => (s -> Bool) -> Parser f s s
-satisfy p = Parser $ Lift $ \f -> case uncons f of
+satisfy p = Parser $ Arr $ \f -> case uncons f of
   That _ -> That f
   These s f'
     | p s -> These s f'
@@ -185,8 +186,8 @@ string = traverse char
 
 -- | Keep only successes matching the predicate.
 filterP :: (Uncons f s) => Parser f s a -> (a -> Bool) -> Parser f s a
-filterP (Parser p) f = Parser $ Lift $ \s ->
-  case reify p s of
+filterP (Parser p) f = Parser $ Arr $ \s ->
+  case run p s of
     This a
       | f a -> This a
       | otherwise -> That s
@@ -204,7 +205,7 @@ filterP (Parser p) f = Parser $ Lift $ \s ->
 -- >>> runParser (many (char 'a')) "xyz"
 -- These "" "xyz"
 many :: Parser f s a -> Parser f s [a]
-many p = Parser $ Lift $ \s -> go s []
+many p = Parser $ Arr $ \s -> go s []
   where
     go s acc = case runParser p s of
       This a -> This (reverse (a : acc))
@@ -253,19 +254,19 @@ runParserError :: Parser f s a -> f -> a
 runParserError p f = asThese (runParser p f)
 
 instance Functor (Parser f s) where
-  fmap f (Parser p) = Parser $ Lift $ \s ->
-    case reify p s of
+  fmap f (Parser p) = Parser $ Arr $ \s ->
+    case run p s of
       This a -> This (f a)
       That s' -> That s'
       These a s' -> These (f a) s'
 
 instance (Uncons f s) => Applicative (Parser f s) where
-  pure a = Parser $ Lift $ \f -> These a f
-  Parser pf <*> Parser pa = Parser $ Lift $ \s ->
-    case reify pf s of
+  pure a = Parser $ Arr $ \f -> These a f
+  Parser pf <*> Parser pa = Parser $ Arr $ \s ->
+    case run pf s of
       This f ->
         This f
-          `thenThese` ( \_ s' -> case reify pa s' of
+          `thenThese` ( \_ s' -> case run pa s' of
                           This a' -> This (f a')
                           That _ -> That s
                           These a' s''' -> These (f a') s'''
@@ -273,43 +274,43 @@ instance (Uncons f s) => Applicative (Parser f s) where
       That s' -> That s'
       These f s' ->
         These f s'
-          `thenThese` ( \_ s'' -> case reify pa s'' of
+          `thenThese` ( \_ s'' -> case run pa s'' of
                           This a' -> This (f a')
                           That _ -> That s
                           These a' s''' -> These (f a') s'''
                       )
-  Parser p1 *> Parser p2 = Parser $ Lift $ \s ->
-    case reify p1 s of
-      This _ -> reify p2 emptyF
+  Parser p1 *> Parser p2 = Parser $ Arr $ \s ->
+    case run p1 s of
+      This _ -> run p2 emptyF
       That s' -> That s'
-      These _ s' -> case reify p2 s' of
+      These _ s' -> case run p2 s' of
         That _ -> That s
         result -> result
-  Parser p1 <* Parser p2 = Parser $ Lift $ \s ->
-    case reify p1 s of
-      This a -> case reify p2 emptyF of
+  Parser p1 <* Parser p2 = Parser $ Arr $ \s ->
+    case run p1 s of
+      This a -> case run p2 emptyF of
         This _ -> This a
         That _ -> That s
         These _ s'' -> These a s''
       That s' -> That s'
-      These a s' -> case reify p2 s' of
+      These a s' -> case run p2 s' of
         This _ -> This a
         That _ -> That s
         These _ s'' -> These a s''
 
 instance (Uncons f s) => Monad (Parser f s) where
-  Parser m >>= k = Parser $ Lift $ \s ->
-    case reify m s of
-      This a -> reify (let Parser p = k a in p) emptyF
+  Parser m >>= k = Parser $ Arr $ \s ->
+    case run m s of
+      This a -> run (let Parser p = k a in p) emptyF
       That s' -> That s'
-      These a s' -> reify (let Parser p = k a in p) s'
+      These a s' -> run (let Parser p = k a in p) s'
 
 -- | A parser that always fails (consumes nothing).
 --
 -- >>> runParser (empty :: Parser String Char Int) "abc"
 -- That "abc"
 empty :: Parser f s a
-empty = Parser $ Lift $ \s -> That s
+empty = Parser $ Arr $ \s -> That s
 
 -- | Try the first parser. Left-biased.
 --
@@ -321,13 +322,13 @@ empty = Parser $ Lift $ \s -> That s
 
 infixl 3 <|>
 
-(Parser p1) <|> (Parser p2) = Parser $ Knot (Lift body)
+(Parser p1) <|> (Parser p2) = Parser $ Knot body
   where
-    body (Right s) = case reify p1 s of
+    body (Right s) = case run p1 s of
       This a -> Right (This a)
       That s' -> Left s'
       These a s' -> Right (These a s')
-    body (Left s) = case reify p2 s of
+    body (Left s) = case run p2 s of
       result -> Right result
 
 -- | Skip zero or more elements matching the predicate.
@@ -342,7 +343,7 @@ skipWhile p = void (many (satisfy p))
 -- >>> runParser (captured (many (satisfy (/= ' ')))) "hello world"
 -- These ("hello","hello") " world"
 captured :: (HasLength f, HasEmpty f) => Parser f s a -> Parser f s (f, a)
-captured p = Parser $ Lift $ \s ->
+captured p = Parser $ Arr $ \s ->
   case runParser p s of
     This a -> This (s, a)
     That _ -> That s
@@ -361,11 +362,11 @@ skipMany p = void (many p)
 -- >>> runParser takeRest "hello"
 -- These "hello" ""
 takeRest :: (HasEmpty f) => Parser f s f
-takeRest = Parser $ Lift $ \f -> These f emptyF
+takeRest = Parser $ Arr $ \f -> These f emptyF
 
 -- | ASCII-only version of satisfy.
 satisfyAscii :: (Uncons f Char) => (Char -> Bool) -> Parser f Char Char
-satisfyAscii p = Parser $ Lift $ \f -> case uncons f of
+satisfyAscii p = Parser $ Arr $ \f -> case uncons f of
   That _ -> That f
   These c f'
     | fromEnum c < 128, p c -> These c f'
@@ -391,7 +392,7 @@ chainr f p z = go
 -- >>> runParser (try (char 'a' >> char 'b')) "ab"
 -- These 'b' ""
 try :: Parser f s a -> Parser f s a
-try p = Parser $ Lift $ \s ->
+try p = Parser $ Arr $ \s ->
   case runParser p s of
     That _ -> That s
     result -> result
@@ -435,7 +436,7 @@ sepBy1 p sep = p >>= \x -> many (try (sep >> p)) >>= \xs -> pure (x : xs)
 -- >>> runParser endOfInput "abc"
 -- That "abc"
 endOfInput :: (HasLength f, HasEmpty f) => Parser f s ()
-endOfInput = Parser $ Lift $ \f ->
+endOfInput = Parser $ Arr $ \f ->
   if streamLength f == 0 then This () else That f
 
 -- | Match a newline character or succeed at end of input.
@@ -445,6 +446,6 @@ endOfInput = Parser $ Lift $ \f ->
 -- >>> runParser lineEnd "\nabc"
 -- These '\n' "abc"
 -- >>> runParser lineEnd ""
--- These ' ' ""
+-- This ' '
 lineEnd :: (Uncons f Char, HasLength f, HasEmpty f) => Parser f Char Char
 lineEnd = char '\n' <|> (endOfInput Data.Functor.$> ' ')
