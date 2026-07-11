@@ -103,7 +103,7 @@ gatherTokens s ts = case runTP (gather s) ts of
 --
 -- >>> runMarkupParser (tokenP Html) "<foo>content</foo>"
 -- ("content</foo>",These () (OpenTag StartTag "foo" []))
-tokenP :: Standard -> Parser String Char Token
+tokenP :: Standard -> Parser ByteString Char Token
 tokenP Html = tokenHtmlP
 tokenP Xml = tokenXmlP
 
@@ -112,7 +112,7 @@ tokenP Xml = tokenXmlP
 -- >>> tokenize Html "<foo>content</foo>"
 -- That [OpenTag StartTag "foo" [],Content "content",EndTag "foo"]
 tokenize :: Standard -> ByteString -> Warn [Token]
-tokenize s b = first ((: []) . MarkupParser) $ runParserWarn (many (tokenP s)) (B.unpack b)
+tokenize s b = first ((: []) . MarkupParser) $ runParserWarn (many (tokenP s)) b
 
 -- | tokenize but errors on warnings.
 tokenize_ :: Standard -> ByteString -> [Token]
@@ -145,21 +145,22 @@ isWhitespace _ = False
 -- Token parsers (Circuit.Parser, String-based)
 -- ============================================================================
 
--- | capture consumed chars and convert to ByteString
-bs :: Parser String Char a -> Parser String Char ByteString
-bs p = B.pack . fst <$> captured p
+-- | capture consumed chars as a ByteString (O(1) slice: the stream is a
+-- strict ByteString, so 'captured' hands back a slice directly).
+bs :: Parser ByteString Char a -> Parser ByteString Char ByteString
+bs p = fst <$> captured p
 
 -- | equals sign with optional whitespace
-eq_ :: Parser String Char ()
+eq_ :: Parser ByteString Char ()
 eq_ = skipWhile isWhitespace *> char '=' *> skipWhile isWhitespace
 
 -- | quoted string: single or double quoted
-wrappedQ :: Parser String Char ByteString
+wrappedQ :: Parser ByteString Char ByteString
 wrappedQ =
   (char '\'' *> bs (many (satisfy (/= '\''))) <* char '\'')
     <|> (char '"' *> bs (many (satisfy (/= '"'))) <* char '"')
 
-tokenXmlP :: Parser String Char Token
+tokenXmlP :: Parser ByteString Char Token
 tokenXmlP =
   (string "<!--" *> commentP_)
     <|> (string "<!" *> doctypeXmlP_)
@@ -168,7 +169,7 @@ tokenXmlP =
     <|> (string "<" *> startTagsXmlP_)
     <|> contentP_
 
-tokenHtmlP :: Parser String Char Token
+tokenHtmlP :: Parser ByteString Char Token
 tokenHtmlP =
   (string "<!--" *> commentP_)
     <|> (string "<!" *> doctypeHtmlP_)
@@ -208,22 +209,22 @@ isBooleanAttrName x = not (isWhitespace x || x == '/' || x == '>' || x == '<')
 
 -- XML parsers
 
-nameStartCharXmlP :: Parser String Char Char
+nameStartCharXmlP :: Parser ByteString Char Char
 nameStartCharXmlP = satisfy isNameStartChar
 
-nameCharXmlP :: Parser String Char Char
+nameCharXmlP :: Parser ByteString Char Char
 nameCharXmlP = satisfy isNameCharXml
 
-nameXmlP :: Parser String Char ByteString
+nameXmlP :: Parser ByteString Char ByteString
 nameXmlP = bs (nameStartCharXmlP *> many nameCharXmlP)
 
-commentP_ :: Parser String Char Token
+commentP_ :: Parser ByteString Char Token
 commentP_ = Comment <$> (bs (many (satisfy (/= '-') <|> (char '-' *> satisfy (/= '-')))) <* string "-->")
 
-contentP_ :: Parser String Char Token
+contentP_ :: Parser ByteString Char Token
 contentP_ = Content <$> bs (some (satisfy (/= '<')))
 
-declXmlP_ :: Parser String Char Token
+declXmlP_ :: Parser ByteString Char Token
 declXmlP_ =
   let attr key = Attr (B.pack key) <$> (skipWhile isWhitespace *> string key *> eq_ *> wrappedQ)
       one x = [x]
@@ -232,7 +233,7 @@ declXmlP_ =
         <* skipWhile isWhitespace
         <* string "?>"
 
-doctypeXmlP_ :: Parser String Char Token
+doctypeXmlP_ :: Parser ByteString Char Token
 doctypeXmlP_ =
   Doctype
     <$> ( bs
@@ -245,7 +246,7 @@ doctypeXmlP_ =
             <* char '>'
         )
 
-startTagsXmlP_ :: Parser String Char Token
+startTagsXmlP_ :: Parser ByteString Char Token
 startTagsXmlP_ =
   OpenTag EmptyElemTag
     <$> (nameXmlP <* skipWhile isWhitespace <* string "/>")
@@ -254,18 +255,18 @@ startTagsXmlP_ =
     <$> (nameXmlP <* skipWhile isWhitespace <* string ">")
     <*> many (skipWhile isWhitespace *> attrXmlP_)
 
-attrXmlP_ :: Parser String Char Attr
+attrXmlP_ :: Parser ByteString Char Attr
 attrXmlP_ = Attr <$> (nameXmlP <* eq_) <*> wrappedQ
 
-endTagXmlP_ :: Parser String Char Token
+endTagXmlP_ :: Parser ByteString Char Token
 endTagXmlP_ = EndTag <$> (nameXmlP <* skipWhile isWhitespace <* char '>')
 
 -- HTML parsers
 
-nameHtmlP :: Parser String Char ByteString
+nameHtmlP :: Parser ByteString Char ByteString
 nameHtmlP = bs (satisfy isLatinLetter *> many (satisfy isNameChar))
 
-startTagsHtmlP_ :: Parser String Char Token
+startTagsHtmlP_ :: Parser ByteString Char Token
 startTagsHtmlP_ =
   OpenTag StartTag
     <$> (nameHtmlP <* skipWhile isWhitespace)
@@ -274,18 +275,18 @@ startTagsHtmlP_ =
     <$> (nameHtmlP <* skipWhile isWhitespace)
     <*> (attrsHtmlP_ <* skipWhile isWhitespace <* string "/>")
 
-endTagHtmlP_ :: Parser String Char Token
+endTagHtmlP_ :: Parser ByteString Char Token
 endTagHtmlP_ = EndTag <$> (nameHtmlP <* skipWhile isWhitespace <* char '>')
 
-attrHtmlP_ :: Parser String Char Attr
+attrHtmlP_ :: Parser ByteString Char Attr
 attrHtmlP_ =
   (Attr <$> (bs (many (satisfy isAttrName)) <* eq_) <*> (wrappedQ <|> bs (some (satisfy isBooleanAttrName))))
     <|> (flip Attr B.empty <$> bs (some (satisfy isBooleanAttrName)))
 
-attrsHtmlP_ :: Parser String Char [Attr]
+attrsHtmlP_ :: Parser ByteString Char [Attr]
 attrsHtmlP_ = many (skipWhile isWhitespace *> attrHtmlP_) <* skipWhile isWhitespace
 
-doctypeHtmlP_ :: Parser String Char Token
+doctypeHtmlP_ :: Parser ByteString Char Token
 doctypeHtmlP_ =
   Doctype
     <$> ( bs
@@ -297,26 +298,26 @@ doctypeHtmlP_ =
             <* char '>'
         )
 
-bogusCommentHtmlP_ :: Parser String Char Token
+bogusCommentHtmlP_ :: Parser ByteString Char Token
 bogusCommentHtmlP_ = Comment <$> bs (some (satisfy (/= '<')))
 
 -- | Parse a tag name.
-nameP :: Standard -> Parser String Char ByteString
+nameP :: Standard -> Parser ByteString Char ByteString
 nameP Html = nameHtmlP
 nameP Xml = nameXmlP
 
 -- | Parse an attribute.
 -- | Parse attributes list.
-attrsP :: Standard -> Parser String Char [Attr]
+attrsP :: Standard -> Parser ByteString Char [Attr]
 attrsP Html = attrsHtmlP_
 attrsP Xml = many (skipWhile isWhitespace *> attrXmlP_) <* skipWhile isWhitespace
 
 -- | Alias for single whitespace (backward compat with mpar)
-ws :: Parser String Char Char
+ws :: Parser ByteString Char Char
 ws = satisfy isWhitespace
 
 -- | Alias for skip whitespace (backward compat with mpar)
-ws_ :: Parser String Char ()
+ws_ :: Parser ByteString Char ()
 ws_ = skipWhile isWhitespace
 
 -- | Run parser, returning leftovers and errors as 'ParserWarning's.
@@ -329,21 +330,21 @@ ws_ = skipWhile isWhitespace
 --
 -- >>> runParserWarn ws " x"
 -- These (ParserLeftover "x") ' '
-runParserWarn :: Parser String Char a -> String -> These ParserWarning a
+runParserWarn :: Parser ByteString Char a -> ByteString -> These ParserWarning a
 runParserWarn p s = case CP.runParser p s of
-  These a "" -> That a
-  These a rest -> These (ParserLeftover (take 200 rest)) a
+  These a rest | B.null rest -> That a
+  These a rest -> These (ParserLeftover (take 200 (B.unpack rest))) a
   This a -> That a
   That _ -> This ParserUncaught
 
 -- | Run a parser and return the remaining input and result as a tuple
-runMarkupParser :: Parser String Char a -> String -> (String, These () a)
+runMarkupParser :: Parser ByteString Char a -> ByteString -> (ByteString, These () a)
 runMarkupParser p s = case CP.runParser p s of
   These a s' -> (s', These () a)
-  This a -> ([], That a)
+  This a -> (B.empty, That a)
   That s' -> (s', This ())
 
-runParser_ :: Parser String Char a -> String -> a
+runParser_ :: Parser ByteString Char a -> ByteString -> a
 runParser_ p s = case CP.runParser p s of
   These a _ -> a
   This a -> a
