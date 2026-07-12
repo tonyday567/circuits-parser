@@ -98,7 +98,7 @@ import Data.Tree (Tree (..))
 -- Doctype "DOCTYPE foo [ declarations ]"
 --
 -- >>> runMarkupParser (tokenP Html) "<foo a=\"a\" b=\"b\" c=c check>"
--- ("",These () (OpenTag StartTag "foo" [Attr {attrName = "a", attrValue = "a"},Attr {attrName = "b", attrValue = "b"},Attr {attrName = "c", attrValue = "c"},Attr {attrName = "check", attrValue = ""}]))
+-- ("",That (OpenTag StartTag "foo" [Attr {attrName = "a", attrValue = "a"},Attr {attrName = "b", attrValue = "b"},Attr {attrName = "c", attrValue = "c"},Attr {attrName = "check", attrValue = ""}]))
 --
 -- >>> runMarkupParser (tokenP Xml) "<foo a=\"a\" b=\"b\" c=c check>"
 -- ("<foo a=\"a\" b=\"b\" c=c check>",This ())

@@ -50,8 +50,6 @@ module Circuit.Parser
 
     -- * Stream decomposition
     Uncons (..),
-    HasEmpty (..),
-    HasLength (..),
 
     -- * These helpers
     asThese,
@@ -61,9 +59,6 @@ module Circuit.Parser
     -- * Choice
     empty,
     (<|>),
-
-    -- * These threading
-    thenThese,
 
     -- * Additional combinators
     optional,
@@ -81,80 +76,89 @@ module Circuit.Parser
   )
 where
 
-import Circuit (Trace (..), run)
+import Circuit (Trace (..), run, trace)
+import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Monad (void)
+import Data.Bifunctor (first)
+import Data.Bool (bool)
 import Data.ByteString qualified as B
+import Data.Char (isAscii)
 import Data.Functor (($>))
+import Data.Functor qualified as F
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.These (These (..))
+import Data.These (These (..), these)
 import Data.Word (Word8)
 
--- | Types that have an empty/zero value.
-class HasEmpty f where
-  emptyF :: f
-
-instance HasEmpty [a] where emptyF = []
-
-instance HasEmpty B.ByteString where emptyF = B.empty
-
-instance HasEmpty Text where emptyF = T.empty
-
--- | Types whose length can be measured and prefix-taken.
-class HasLength f where
-  streamLength :: f -> Int
-  streamTake :: Int -> f -> f
-
-instance HasLength [a] where
-  streamLength = length
-  streamTake = take
-
-instance HasLength B.ByteString where
-  streamLength = B.length
-  streamTake = B.take
-
 -- | Typeclass for deconstructing input streams into head and tail.
-class (HasEmpty f) => Uncons f s where
+--
+-- The 'Monoid' superclass supplies the empty stream ('mempty'): after a
+-- 'This' result the input is spent, but a continuation parser still needs
+-- /some/ stream to run on, so the combinators feed it 'mempty'.
+class (Monoid f) => Uncons f s where
   uncons :: f -> These s f
 
 newtype Parser f s a = Parser
   { unParser :: Trace Either (->) f (These a f)
   }
 
--- | Run a parser on a stream, returning the 'These' result.
+-- | Run a parser on a stream, returning the raw 'These' result.
 runParser :: Parser f s a -> f -> These a f
 runParser = run . unParser
 
+-- The final element is announced as 'This' by the 'Uncons' instance at the
+-- point of extraction. 'pure' does not inspect the stream, so an exact
+-- match leaves an empty remainder as @These a mempty@ rather than forcing
+-- a final 'This' inside the parser. Each instance reuses the stream's own
+-- decomposition and an O(1) emptiness test on the remainder (never a length
+-- measurement — 'Text' length is O(n)).
+
 instance Uncons [a] a where
   uncons [] = That []
+  uncons [x] = This x
   uncons (x : xs) = These x xs
 
 instance Uncons B.ByteString Char where
-  uncons bs
-    | B.null bs = That bs
-    | otherwise = These (toEnum (fromIntegral (B.head bs)) :: Char) (B.tail bs)
+  uncons bs = case B.uncons bs of
+    Nothing -> That bs
+    Just (w, rest)
+      | B.null rest -> This (w2c w)
+      | otherwise -> These (w2c w) rest
+    where
+      w2c = toEnum . fromIntegral
 
 instance Uncons B.ByteString Word8 where
-  uncons bs
-    | B.null bs = That bs
-    | otherwise = These (B.head bs) (B.tail bs)
+  uncons bs = case B.uncons bs of
+    Nothing -> That bs
+    Just (w, rest)
+      | B.null rest -> This w
+      | otherwise -> These w rest
 
 instance Uncons Text Char where
-  uncons t
-    | T.null t = That t
-    | otherwise = These (T.head t) (T.tail t)
+  uncons t = case T.uncons t of
+    Nothing -> That t
+    Just (c, rest)
+      | T.null rest -> This c
+      | otherwise -> These c rest
 
 -- | Consume and return the next element, or 'That' if the stream is empty.
 --
 -- @
--- runParser anyToken \"abc\" = These \'a\' \"bc\"
--- runParser anyToken \"\" = That \"\"
+-- runParser anyToken \"abc\" = These 'a' \"bc\"
+-- runParser anyToken \"c\"   = This 'c'
+-- runParser anyToken \"\"    = That \"\"
 -- @
 anyToken :: (Uncons f s) => Parser f s s
-anyToken = Parser $ Arr $ \f -> case uncons f of
-  That _ -> That f
-  These s f' -> These s f'
-  This _ -> That f
+anyToken = Parser $ Arr uncons
+
+-- | Apply a predicate to the value inside a 'These' result. On failure the
+-- original stream is returned intact.
+guardThese :: (a -> Bool) -> f -> These a f -> These a f
+guardThese p def =
+  these
+    (\a -> bool (That def) (This a) (p a))
+    That
+    (\a b -> bool (That def) (These a b) (p a))
 
 -- | Consume one element if it satisfies the predicate.
 --
@@ -163,12 +167,7 @@ anyToken = Parser $ Arr $ \f -> case uncons f of
 -- >>> runParser (satisfy (> 'a')) "abc"
 -- That "abc"
 satisfy :: (Uncons f s) => (s -> Bool) -> Parser f s s
-satisfy p = Parser $ Arr $ \f -> case uncons f of
-  That _ -> That f
-  These s f'
-    | p s -> These s f'
-    | otherwise -> That f
-  This _ -> That f
+satisfy p = Parser $ Arr $ guardThese p <*> uncons
 
 -- | Match a specific element.
 --
@@ -186,46 +185,7 @@ string = traverse char
 
 -- | Keep only successes matching the predicate.
 filterP :: (Uncons f s) => Parser f s a -> (a -> Bool) -> Parser f s a
-filterP (Parser p) f = Parser $ Arr $ \s ->
-  case run p s of
-    This a
-      | f a -> This a
-      | otherwise -> That s
-    That s' -> That s'
-    These a s'
-      | f a -> These a s'
-      | otherwise -> That s
-
--- | Zero or more repetitions. Accumulates results until failure.
---
--- Stops on 'That' (no progress), returning what was accumulated.
---
--- >>> runParser (many (char 'a')) "aaab"
--- These "aaa" "b"
--- >>> runParser (many (char 'a')) "xyz"
--- These "" "xyz"
-many :: Parser f s a -> Parser f s [a]
-many p = Parser $ Arr $ \s -> go s []
-  where
-    go s acc = case runParser p s of
-      This a -> This (reverse (a : acc))
-      These a s' -> go s' (a : acc)
-      That s' -> These (reverse acc) s'
-
--- | One or more repetitions. Fails if the first parse fails.
---
--- >>> runParser (some (char 'a')) "aaab"
--- These "aaa" "b"
--- >>> runParser (some (char 'a')) "xyz"
--- That "xyz"
-some :: (Uncons f s) => Parser f s a -> Parser f s [a]
-some p = (:) <$> p <*> many p
-
--- | Thread state through 'These' results.
-thenThese :: (HasEmpty f) => These a f -> (a -> f -> These b f) -> These b f
-thenThese (This a) f = f a emptyF
-thenThese (That s) _ = That s
-thenThese (These a s) f = f a s
+filterP (Parser p) f = Parser $ Arr $ guardThese f <*> run p
 
 -- | Extract value from a parse result, erroring on failure.
 asThese :: These a f -> a
@@ -254,82 +214,34 @@ runParserError :: Parser f s a -> f -> a
 runParserError p f = asThese (runParser p f)
 
 instance Functor (Parser f s) where
-  fmap f (Parser p) = Parser $ Arr $ \s ->
-    case run p s of
-      This a -> This (f a)
-      That s' -> That s'
-      These a s' -> These (f a) s'
+  fmap g (Parser p) = Parser (F.fmap (first g) p)
 
 instance (Uncons f s) => Applicative (Parser f s) where
-  pure a = Parser $ Arr $ \f -> These a f
-  Parser pf <*> Parser pa = Parser $ Arr $ \s ->
-    case run pf s of
-      This f ->
-        This f
-          `thenThese` ( \_ s' -> case run pa s' of
-                          This a' -> This (f a')
-                          That _ -> That s
-                          These a' s''' -> These (f a') s'''
-                      )
-      That s' -> That s'
-      These f s' ->
-        These f s'
-          `thenThese` ( \_ s'' -> case run pa s'' of
-                          This a' -> This (f a')
-                          That _ -> That s
-                          These a' s''' -> These (f a') s'''
-                      )
-  Parser p1 *> Parser p2 = Parser $ Arr $ \s ->
-    case run p1 s of
-      This _ -> run p2 emptyF
-      That s' -> That s'
-      These _ s' -> case run p2 s' of
-        That _ -> That s
-        result -> result
-  Parser p1 <* Parser p2 = Parser $ Arr $ \s ->
-    case run p1 s of
-      This a -> case run p2 emptyF of
-        This _ -> This a
-        That _ -> That s
-        These _ s'' -> These a s''
-      That s' -> That s'
-      These a s' -> case run p2 s' of
-        This _ -> This a
-        That _ -> That s
-        These _ s'' -> These a s''
+  pure a = Parser $ Arr $ These a
+
+  Parser pf <*> pa = Parser $ Arr $ \s ->
+    let app g s' = case runParser pa s' of
+          That _ -> That s
+          res -> first g res
+     in case run pf s of
+          That _ -> That s
+          This g -> app g mempty
+          These g s' -> app g s'
 
 instance (Uncons f s) => Monad (Parser f s) where
   Parser m >>= k = Parser $ Arr $ \s ->
     case run m s of
-      This a -> run (let Parser p = k a in p) emptyF
       That s' -> That s'
-      These a s' -> run (let Parser p = k a in p) s'
+      This a -> runParser (k a) mempty
+      These a s' -> runParser (k a) s'
 
--- | A parser that always fails (consumes nothing).
---
--- >>> runParser (empty :: Parser String Char Int) "abc"
--- That "abc"
-empty :: Parser f s a
-empty = Parser $ Arr $ \s -> That s
-
--- | Try the first parser. Left-biased.
---
--- >>> runParser (char 'a' <|> char 'b') "abc"
--- These 'a' "bc"
--- >>> runParser (char 'x' <|> char 'y') "abc"
--- That "abc"
-(<|>) :: Parser f s a -> Parser f s a -> Parser f s a
-
-infixl 3 <|>
-
-(Parser p1) <|> (Parser p2) = Parser $ Knot body
-  where
-    body (Right s) = case run p1 s of
-      This a -> Right (This a)
+instance (Uncons f s) => Alternative (Parser f s) where
+  empty = Parser $ Arr That
+  Parser p1 <|> Parser p2 = Parser $ Arr $ trace $ \case
+    Right s -> case run p1 s of
       That s' -> Left s'
-      These a s' -> Right (These a s')
-    body (Left s) = case run p2 s of
-      result -> Right result
+      res -> Right res
+    Left s -> Right (run p2 s)
 
 -- | Skip zero or more elements matching the predicate.
 --
@@ -338,16 +250,25 @@ infixl 3 <|>
 skipWhile :: (Uncons f s) => (s -> Bool) -> Parser f s ()
 skipWhile p = void (many (satisfy p))
 
--- | Capture the consumed portion of the input.
+-- | Zero or more repetitions. Accumulates results until failure.
 --
--- >>> runParser (captured (many (satisfy (/= ' ')))) "hello world"
--- These ("hello","hello") " world"
-captured :: (HasLength f, HasEmpty f) => Parser f s a -> Parser f s (f, a)
-captured p = Parser $ Arr $ \s ->
-  case runParser p s of
-    This a -> This (s, a)
-    That _ -> That s
-    These a s' -> These (streamTake (streamLength s - streamLength s') s, a) s'
+-- Stops on 'That' (no progress), returning what was accumulated.
+--
+-- >>> runParser (many (char 'a')) "aaab"
+-- These "aaa" "b"
+-- >>> runParser (many (char 'a')) "xyz"
+-- These "" "xyz"
+many :: (Uncons f s) => Parser f s a -> Parser f s [a]
+many p = some p <|> pure []
+
+-- | One or more repetitions. Fails if the first parse fails.
+--
+-- >>> runParser (some (char 'a')) "aaab"
+-- These "aaa" "b"
+-- >>> runParser (some (char 'a')) "xyz"
+-- That "xyz"
+some :: (Uncons f s) => Parser f s a -> Parser f s [a]
+some p = (:) <$> p <*> many p
 
 -- | Zero or one repetition.
 optional :: (Uncons f s) => Parser f s a -> Parser f s (Maybe a)
@@ -357,21 +278,44 @@ optional p = (Just <$> p) <|> pure Nothing
 skipMany :: (Uncons f s) => Parser f s a -> Parser f s ()
 skipMany p = void (many p)
 
--- | Consume all remaining input.
+-- | Consume all remaining input. Spends the stream, so the result is 'This'.
 --
 -- >>> runParser takeRest "hello"
--- These "hello" ""
-takeRest :: (HasEmpty f) => Parser f s f
-takeRest = Parser $ Arr $ \f -> These f emptyF
+-- This "hello"
+takeRest :: Parser f s f
+takeRest = Parser $ Arr This
+
+-- | Types that support O(n) or O(1) length and prefix taking.
+class (Monoid f) => Slice f where
+  sliceLength :: f -> Int
+  sliceTake :: Int -> f -> f
+
+instance Slice B.ByteString where
+  sliceLength = B.length
+  sliceTake = B.take
+
+instance Slice Text where
+  sliceLength = T.length
+  sliceTake = T.take
+
+instance Slice [a] where
+  sliceLength = length
+  sliceTake = take
+
+-- | Capture the consumed portion of the input.
+--
+-- >>> runParser (captured (many (satisfy (/= ' ')))) "hello world"
+-- These ("hello","hello") " world"
+captured :: (Slice f) => Parser f s a -> Parser f s (f, a)
+captured p = Parser $ Arr $ \s ->
+  case runParser p s of
+    This a -> This (s, a)
+    That _ -> That s
+    These a s' -> These (sliceTake (sliceLength s - sliceLength s') s, a) s'
 
 -- | ASCII-only version of satisfy.
 satisfyAscii :: (Uncons f Char) => (Char -> Bool) -> Parser f Char Char
-satisfyAscii p = Parser $ Arr $ \f -> case uncons f of
-  That _ -> That f
-  These c f'
-    | fromEnum c < 128, p c -> These c f'
-    | otherwise -> That f
-  This _ -> That f
+satisfyAscii p = satisfy (\c -> isAscii c && p c)
 
 -- | Try a parser with a fallback continuation.
 withOption :: (Uncons f s) => Parser f s a -> (a -> Parser f s b) -> Parser f s b -> Parser f s b
@@ -390,7 +334,7 @@ chainr f p z = go
 -- >>> runParser (try (char 'a' >> char 'b')) "ac"
 -- That "ac"
 -- >>> runParser (try (char 'a' >> char 'b')) "ab"
--- These 'b' ""
+-- This 'b'
 try :: Parser f s a -> Parser f s a
 try p = Parser $ Arr $ \s ->
   case runParser p s of
@@ -431,13 +375,19 @@ sepBy1 p sep = p >>= \x -> many (try (sep >> p)) >>= \xs -> pure (x : xs)
 
 -- | Succeed only at the end of input. Returns unit.
 --
--- >>> runParser endOfInput ""
+-- End of input is exactly a 'That' from the 'uncons' coalgebra — no length
+-- measurement, so this works for any 'Uncons' stream (including 'Text').
+-- The element type @s@ is fixed by the surrounding parser; a standalone use
+-- must pin it (as any @s@-polymorphic combinator does).
+--
+-- >>> runParser (endOfInput :: Parser String Char ()) ""
 -- This ()
--- >>> runParser endOfInput "abc"
+-- >>> runParser (endOfInput :: Parser String Char ()) "abc"
 -- That "abc"
-endOfInput :: (HasLength f, HasEmpty f) => Parser f s ()
-endOfInput = Parser $ Arr $ \f ->
-  if streamLength f == 0 then This () else That f
+endOfInput :: forall f s. (Uncons f s) => Parser f s ()
+endOfInput = Parser $ Arr $ \f -> case (uncons f :: These s f) of
+  That _ -> This ()
+  _ -> That f
 
 -- | Match a newline character or succeed at end of input.
 -- Useful for line-oriented parsing where the last line
@@ -447,5 +397,5 @@ endOfInput = Parser $ Arr $ \f ->
 -- These '\n' "abc"
 -- >>> runParser lineEnd ""
 -- This ' '
-lineEnd :: (Uncons f Char, HasLength f, HasEmpty f) => Parser f Char Char
-lineEnd = char '\n' <|> (endOfInput Data.Functor.$> ' ')
+lineEnd :: (Uncons f Char) => Parser f Char Char
+lineEnd = char '\n' <|> (endOfInput $> ' ')

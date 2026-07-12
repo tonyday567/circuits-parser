@@ -340,6 +340,7 @@ runParserWarn p s = case CP.runParser p s of
 -- | Run a parser and return the remaining input and result as a tuple
 runMarkupParser :: Parser ByteString Char a -> ByteString -> (ByteString, These () a)
 runMarkupParser p s = case CP.runParser p s of
+  These a s' | B.null s' -> (B.empty, That a)
   These a s' -> (s', These () a)
   This a -> (B.empty, That a)
   That s' -> (s', This ())
