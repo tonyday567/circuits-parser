@@ -58,7 +58,7 @@ import Circuit.Markup.Types
 import Circuit.Markup.Warn (warnError)
 import Circuit.Parser
   ( Parser,
-    captured,
+    capturedBS,
     char,
     many,
     satisfy,
@@ -145,10 +145,9 @@ isWhitespace _ = False
 -- Token parsers (Circuit.Parser, String-based)
 -- ============================================================================
 
--- | capture consumed chars as a ByteString (O(1) slice: the stream is a
--- strict ByteString, so 'captured' hands back a slice directly).
+-- | Matched span as a 'ByteString' ('capturedBS' — flatparse specialty).
 bs :: Parser ByteString Char a -> Parser ByteString Char ByteString
-bs p = fst <$> captured p
+bs p = fst <$> capturedBS p
 
 -- | equals sign with optional whitespace
 eq_ :: Parser ByteString Char ()

@@ -13,9 +13,9 @@
 -- any stream-like type: @String@, @Text@, @ByteString@, etc.
 --
 -- @
---   'This' a    — consumed everything, final result
 --   'That' f    — no progress, stream intact (for backtracking)
---   'These' a f — consumed some, result + remainder
+--   'These' a f — result + remainder (remainder may be empty)
+--   'This' a    — optional boundary form only (extractors treat as success)
 -- @
 --
 -- >>> runParser (char 'a') "abc"
@@ -44,8 +44,8 @@ module Circuit.Parser
     many,
     some,
 
-    -- * Capture
-    captured,
+    -- * Capture (ByteString specialty)
+    capturedBS,
     skipWhile,
 
     -- * Stream decomposition
@@ -92,10 +92,10 @@ import Data.Word (Word8)
 
 -- | Typeclass for deconstructing input streams into head and tail.
 --
--- The 'Monoid' superclass supplies the empty stream ('mempty'): after a
--- 'This' result the input is spent, but a continuation parser still needs
--- /some/ stream to run on, so the combinators feed it 'mempty'.
-class (Monoid f) => Uncons f s where
+-- No 'Monoid' constraint: emptiness is the residual already held by a
+-- successful peel (or each stream's own empty literal at the instance),
+-- not a fabricated 'mempty' for sequencing after 'This'.
+class Uncons f s where
   uncons :: f -> These s f
 
 newtype Parser f s a = Parser
@@ -106,46 +106,36 @@ newtype Parser f s a = Parser
 runParser :: Parser f s a -> f -> These a f
 runParser = run . unParser
 
--- The final element is announced as 'This' by the 'Uncons' instance at the
--- point of extraction. 'pure' does not inspect the stream, so an exact
--- match leaves an empty remainder as @These a mempty@ rather than forcing
--- a final 'This' inside the parser. Each instance reuses the stream's own
--- decomposition and an O(1) emptiness test on the remainder (never a length
--- measurement — 'Text' length is O(n)).
+-- Last element yields an empty residual via the stream's own uncons
+-- (e.g. @B.uncons@ rest), never a separate 'This' announcement. 'pure'
+-- is @These a@ (pass the incoming stream through as remainder).
 
 instance Uncons [a] a where
   uncons [] = That []
-  uncons [x] = This x
   uncons (x : xs) = These x xs
 
 instance Uncons B.ByteString Char where
   uncons bs = case B.uncons bs of
     Nothing -> That bs
-    Just (w, rest)
-      | B.null rest -> This (w2c w)
-      | otherwise -> These (w2c w) rest
+    Just (w, rest) -> These (w2c w) rest
     where
       w2c = toEnum . fromIntegral
 
 instance Uncons B.ByteString Word8 where
   uncons bs = case B.uncons bs of
     Nothing -> That bs
-    Just (w, rest)
-      | B.null rest -> This w
-      | otherwise -> These w rest
+    Just (w, rest) -> These w rest
 
 instance Uncons Text Char where
   uncons t = case T.uncons t of
     Nothing -> That t
-    Just (c, rest)
-      | T.null rest -> This c
-      | otherwise -> These c rest
+    Just (c, rest) -> These c rest
 
 -- | Consume and return the next element, or 'That' if the stream is empty.
 --
 -- @
 -- runParser anyToken \"abc\" = These 'a' \"bc\"
--- runParser anyToken \"c\"   = This 'c'
+-- runParser anyToken \"c\"   = These 'c' \"\"
 -- runParser anyToken \"\"    = That \"\"
 -- @
 anyToken :: (Uncons f s) => Parser f s s
@@ -156,6 +146,7 @@ anyToken = Parser $ Arr uncons
 guardThese :: (a -> Bool) -> f -> These a f -> These a f
 guardThese p def =
   these
+    -- 'This' is a boundary form only; treat as success with no residual.
     (\a -> bool (That def) (This a) (p a))
     That
     (\a b -> bool (That def) (These a b) (p a))
@@ -217,6 +208,7 @@ instance Functor (Parser f s) where
   fmap g (Parser p) = Parser (F.fmap (first g) p)
 
 instance (Uncons f s) => Applicative (Parser f s) where
+  -- Pass the stream through as remainder (no consumption, no mempty).
   pure a = Parser $ Arr $ These a
 
   Parser pf <*> pa = Parser $ Arr $ \s ->
@@ -225,15 +217,16 @@ instance (Uncons f s) => Applicative (Parser f s) where
           res -> first g res
      in case run pf s of
           That _ -> That s
-          This g -> app g mempty
           These g s' -> app g s'
+          -- Boundary 'This' only (e.g. rare); cannot sequence without residual.
+          This _ -> That s
 
 instance (Uncons f s) => Monad (Parser f s) where
   Parser m >>= k = Parser $ Arr $ \s ->
     case run m s of
       That s' -> That s'
-      This a -> runParser (k a) mempty
       These a s' -> runParser (k a) s'
+      This _ -> That s
 
 instance (Uncons f s) => Alternative (Parser f s) where
   empty = Parser $ Arr That
@@ -278,40 +271,35 @@ optional p = (Just <$> p) <|> pure Nothing
 skipMany :: (Uncons f s) => Parser f s a -> Parser f s ()
 skipMany p = void (many p)
 
--- | Consume all remaining input. Spends the stream, so the result is 'This'.
+-- | Consume all remaining input as the value; remainder is empty.
+--
+-- Local 'Monoid' only: this is the one combinator that must conjure an
+-- empty residual. Not a superclass of 'Uncons'.
 --
 -- >>> runParser takeRest "hello"
--- This "hello"
-takeRest :: Parser f s f
-takeRest = Parser $ Arr This
+-- These "hello" ""
+takeRest :: (Monoid f) => Parser f s f
+takeRest = Parser $ Arr $ \s -> These s mempty
 
--- | Types that support O(n) or O(1) length and prefix taking.
-class (Monoid f) => Slice f where
-  sliceLength :: f -> Int
-  sliceTake :: Int -> f -> f
-
-instance Slice B.ByteString where
-  sliceLength = B.length
-  sliceTake = B.take
-
-instance Slice Text where
-  sliceLength = T.length
-  sliceTake = T.take
-
-instance Slice [a] where
-  sliceLength = length
-  sliceTake = take
-
--- | Capture the consumed portion of the input.
+-- | Capture the matched 'ByteString' prefix of a successful parse.
 --
--- >>> runParser (captured (many (satisfy (/= ' ')))) "hello world"
--- These ("hello","hello") " world"
-captured :: (Slice f) => Parser f s a -> Parser f s (f, a)
-captured p = Parser $ Arr $ \s ->
+-- Flatparse-era specialty: measure consumed length via @B.length@ on the
+-- remainder and 'B.take' a prefix of the original (cheap for strict
+-- 'ByteString'). Not verified to beat simpler strategies (e.g. accumulate
+-- chars then 'B.pack'); kept for markup token spans.
+--
+-- Not polymorphic over 'Text' / @[]@ — those reintroduce O(n) length and
+-- copy, which the 'Uncons' coalgebra story deliberately avoids.
+--
+-- >>> import Data.ByteString.Char8 qualified as C
+-- >>> runParser (fmap fst (capturedBS (many (satisfy (/= ' '))))) (C.pack "hello world")
+-- These "hello" " world"
+capturedBS :: Parser B.ByteString Char a -> Parser B.ByteString Char (B.ByteString, a)
+capturedBS p = Parser $ Arr $ \s ->
   case runParser p s of
-    This a -> This (s, a)
     That _ -> That s
-    These a s' -> These (sliceTake (sliceLength s - sliceLength s') s, a) s'
+    This a -> These (s, a) B.empty -- whole stream was the match (boundary)
+    These a s' -> These (B.take (B.length s - B.length s') s, a) s'
 
 -- | ASCII-only version of satisfy.
 satisfyAscii :: (Uncons f Char) => (Char -> Bool) -> Parser f Char Char
@@ -334,7 +322,7 @@ chainr f p z = go
 -- >>> runParser (try (char 'a' >> char 'b')) "ac"
 -- That "ac"
 -- >>> runParser (try (char 'a' >> char 'b')) "ab"
--- This 'b'
+-- These 'b' ""
 try :: Parser f s a -> Parser f s a
 try p = Parser $ Arr $ \s ->
   case runParser p s of
@@ -381,12 +369,12 @@ sepBy1 p sep = p >>= \x -> many (try (sep >> p)) >>= \xs -> pure (x : xs)
 -- must pin it (as any @s@-polymorphic combinator does).
 --
 -- >>> runParser (endOfInput :: Parser String Char ()) ""
--- This ()
+-- These () ""
 -- >>> runParser (endOfInput :: Parser String Char ()) "abc"
 -- That "abc"
 endOfInput :: forall f s. (Uncons f s) => Parser f s ()
 endOfInput = Parser $ Arr $ \f -> case (uncons f :: These s f) of
-  That _ -> This ()
+  That emptyF -> These () emptyF
   _ -> That f
 
 -- | Match a newline character or succeed at end of input.
@@ -396,6 +384,6 @@ endOfInput = Parser $ Arr $ \f -> case (uncons f :: These s f) of
 -- >>> runParser lineEnd "\nabc"
 -- These '\n' "abc"
 -- >>> runParser lineEnd ""
--- This ' '
+-- These ' ' ""
 lineEnd :: (Uncons f Char) => Parser f Char Char
 lineEnd = char '\n' <|> (endOfInput $> ' ')

@@ -104,7 +104,18 @@ runParserMaybe :: (Uncons f s) => Parser f s a -> f -> Maybe a
 runParserError :: (Uncons f s) => Parser f s a -> f -> a
 ```
 
-## consumers
+## package map
+
+| layer | modules | role |
+|-------|---------|------|
+| **core** | `Circuit.Parser`, `.Lexer`, `.Token`, `.Primitives` | stream coalgebra + combinators + fast lexers |
+| **specialty** | `Circuit.Markup*` | HTML/XML-ish tokenize → gather → render |
+| **examples** | `examples/deck.md` | domain dialects (card/deck marks) — not library API |
+
+External consumers (huihua, chart-svg-dev, …) depend on **core** (and markup
+when needed). They own their dialects; this package does not ship them.
+
+### core
 
 `Circuit.Parser.Primitives` — numeric parsers (`digit`, `int`, `double`, `signed`) and UTF-8 conversions.
 
@@ -112,4 +123,10 @@ runParserError :: (Uncons f s) => Parser f s a -> f -> a
 
 `Circuit.Parser.Lexer` — fast imperative `ByteString` lexers (zero-copy slices), complementary to the combinator path: they trade compositionality for raw speed, and the markup lexer doubles as a state machine that morphs into a `Circuit` when composition is needed.
 
-`Circuit.Markup` / `Circuit.Deck` — HTML/XML markup and `mark`/`elab` deck parsers built on the combinators above.
+### specialty
+
+`Circuit.Markup` — HTML/XML-ish markup pipeline on the combinators above.
+
+### examples
+
+`examples/deck.md` — mark/elab **card** dialect (former `Circuit.Deck`), paste-into-repl card.

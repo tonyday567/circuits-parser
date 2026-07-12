@@ -1,10 +1,11 @@
 cabal-version: 3.0
 name: circuits-parser
 version: 0.1.0.0
-synopsis: Parser and markup libraries for the circuits ecosystem
+synopsis: Parser and markup for the circuits ecosystem
 description:
-  A parser combinator library built on Circuit, together with deck and markup
-  parsers for the circuits ecosystem.
+  Parser combinators built on Circuit (core), plus an HTML/XML-ish markup
+  pipeline (specialty). Domain dialects (e.g. deck/card syntax) live as
+  example cards under examples/, not as library modules.
 
 license: BSD-3-Clause
 author: Tony Day
@@ -19,7 +20,6 @@ source-repository head
 
 library
   exposed-modules:
-    Circuit.Deck
     Circuit.Markup
     Circuit.Markup.Parse
     Circuit.Markup.Render
