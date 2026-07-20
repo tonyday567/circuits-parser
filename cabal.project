@@ -1,10 +1,6 @@
 packages:
   circuits-parser.cabal
-
-source-repository-package
-  type: git
-  location: https://github.com/tonyday567/circuits.git
-  branch: main
+  ../circuits/circuits.cabal
 
 constraints:
   circuits >= 0.2

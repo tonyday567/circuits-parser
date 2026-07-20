@@ -76,7 +76,7 @@ module Circuit.Parser
   )
 where
 
-import Circuit (Trace (..), run, trace)
+import Circuit (Loop (..), run, trace)
 import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Monad (void)
 import Data.Bifunctor (first)
@@ -99,7 +99,7 @@ class Uncons f s where
   uncons :: f -> These s f
 
 newtype Parser f s a = Parser
-  { unParser :: Trace Either (->) f (These a f)
+  { unParser :: Loop Either (->) f (These a f)
   }
 
 -- | Run a parser on a stream, returning the raw 'These' result.
@@ -139,7 +139,7 @@ instance Uncons Text Char where
 -- runParser anyToken \"\"    = That \"\"
 -- @
 anyToken :: (Uncons f s) => Parser f s s
-anyToken = Parser $ Arr uncons
+anyToken = Parser $ Lift uncons
 
 -- | Apply a predicate to the value inside a 'These' result. On failure the
 -- original stream is returned intact.
@@ -158,7 +158,7 @@ guardThese p def =
 -- >>> runParser (satisfy (> 'a')) "abc"
 -- That "abc"
 satisfy :: (Uncons f s) => (s -> Bool) -> Parser f s s
-satisfy p = Parser $ Arr $ guardThese p <*> uncons
+satisfy p = Parser $ Lift $ guardThese p <*> uncons
 
 -- | Match a specific element.
 --
@@ -176,7 +176,7 @@ string = traverse char
 
 -- | Keep only successes matching the predicate.
 filterP :: (Uncons f s) => Parser f s a -> (a -> Bool) -> Parser f s a
-filterP (Parser p) f = Parser $ Arr $ guardThese f <*> run p
+filterP (Parser p) f = Parser $ Lift $ guardThese f <*> run p
 
 -- | Extract value from a parse result, erroring on failure.
 asThese :: These a f -> a
@@ -209,9 +209,9 @@ instance Functor (Parser f s) where
 
 instance (Uncons f s) => Applicative (Parser f s) where
   -- Pass the stream through as remainder (no consumption, no mempty).
-  pure a = Parser $ Arr $ These a
+  pure a = Parser $ Lift $ These a
 
-  Parser pf <*> pa = Parser $ Arr $ \s ->
+  Parser pf <*> pa = Parser $ Lift $ \s ->
     let app g s' = case runParser pa s' of
           That _ -> That s
           res -> first g res
@@ -222,15 +222,15 @@ instance (Uncons f s) => Applicative (Parser f s) where
           This _ -> That s
 
 instance (Uncons f s) => Monad (Parser f s) where
-  Parser m >>= k = Parser $ Arr $ \s ->
+  Parser m >>= k = Parser $ Lift $ \s ->
     case run m s of
       That s' -> That s'
       These a s' -> runParser (k a) s'
       This _ -> That s
 
 instance (Uncons f s) => Alternative (Parser f s) where
-  empty = Parser $ Arr That
-  Parser p1 <|> Parser p2 = Parser $ Arr $ trace $ \case
+  empty = Parser $ Lift That
+  Parser p1 <|> Parser p2 = Parser $ Lift $ trace $ \case
     Right s -> case run p1 s of
       That s' -> Left s'
       res -> Right res
@@ -279,7 +279,7 @@ skipMany p = void (many p)
 -- >>> runParser takeRest "hello"
 -- These "hello" ""
 takeRest :: (Monoid f) => Parser f s f
-takeRest = Parser $ Arr $ \s -> These s mempty
+takeRest = Parser $ Lift $ \s -> These s mempty
 
 -- | Capture the matched 'ByteString' prefix of a successful parse.
 --
@@ -295,7 +295,7 @@ takeRest = Parser $ Arr $ \s -> These s mempty
 -- >>> runParser (fmap fst (capturedBS (many (satisfy (/= ' '))))) (C.pack "hello world")
 -- These "hello" " world"
 capturedBS :: Parser B.ByteString Char a -> Parser B.ByteString Char (B.ByteString, a)
-capturedBS p = Parser $ Arr $ \s ->
+capturedBS p = Parser $ Lift $ \s ->
   case runParser p s of
     That _ -> That s
     This a -> These (s, a) B.empty -- whole stream was the match (boundary)
@@ -324,7 +324,7 @@ chainr f p z = go
 -- >>> runParser (try (char 'a' >> char 'b')) "ab"
 -- These 'b' ""
 try :: Parser f s a -> Parser f s a
-try p = Parser $ Arr $ \s ->
+try p = Parser $ Lift $ \s ->
   case runParser p s of
     That _ -> That s
     result -> result
@@ -373,7 +373,7 @@ sepBy1 p sep = p >>= \x -> many (try (sep >> p)) >>= \xs -> pure (x : xs)
 -- >>> runParser (endOfInput :: Parser String Char ()) "abc"
 -- That "abc"
 endOfInput :: forall f s. (Uncons f s) => Parser f s ()
-endOfInput = Parser $ Arr $ \f -> case (uncons f :: These s f) of
+endOfInput = Parser $ Lift $ \f -> case (uncons f :: These s f) of
   That emptyF -> These () emptyF
   _ -> That f
 
