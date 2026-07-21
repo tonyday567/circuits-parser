@@ -4,7 +4,6 @@ module Circuit.Parser.Token
   ( -- Tokenization
     tokenize,
     tokenizeLoop,
-    prettifyTokens,
     -- Token patterns
     lowerLetter,
     upperLetter,
@@ -22,11 +21,10 @@ module Circuit.Parser.Token
     vocabularySize,
     filterVocabulary,
     takeTopN,
-    prettifyVocabulary,
   )
 where
 
-import Circuit.Parser (Parser (..), These (..), Uncons (..), char, runParser, satisfy, some, (<|>))
+import Circuit.Parser (Parser, These (..), Uncons (..), char, runParser, satisfy, some, (<|>))
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Foldable (toList)
 import Data.IntMap.Strict qualified as IntMap
@@ -35,7 +33,6 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Harpie.Array (Array)
 import Harpie.Array qualified as A
-import Prettyprinter (pretty)
 
 -- ============================================================================
 -- Token Patterns
@@ -94,10 +91,6 @@ tokenizeLoop s acc =
     That _ ->
       case s of
         (_ : rest) -> tokenizeLoop rest acc
-
--- | Pretty-print token array for display
-prettifyTokens :: Array Text -> String
-prettifyTokens arr = show (pretty arr)
 
 -- ============================================================================
 -- Vocabulary Building
@@ -169,15 +162,4 @@ takeTopN n vocab =
       newRev = IntMap.fromList (zip [0 ..] tokensToKeep)
    in Vocabulary newFwd newRev (length tokensToKeep)
 
--- ============================================================================
--- Vocabulary Display
--- ============================================================================
 
-prettifyVocabulary :: Vocabulary -> String
-prettifyVocabulary vocab =
-  let vocabList =
-        [ (idx, tok)
-        | idx <- [0 .. vocabSize vocab - 1],
-          Just tok <- [IntMap.lookup idx (vocabIndexToToken vocab)]
-        ]
-   in unlines $ map (\(i, tok) -> show i ++ ": " ++ Text.unpack tok) vocabList

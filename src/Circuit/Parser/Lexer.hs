@@ -46,6 +46,9 @@ import GHC.Generics (Generic)
 import Prelude hiding (id, (.))
 import Prelude qualified as P
 
+-- $setup
+-- >>> import Data.ByteString.Char8 qualified as C
+
 -- | Strict unboxed pair of byte and index.
 data WI = WI {-# UNPACK #-} !Word8 {-# UNPACK #-} !Int
 
@@ -57,7 +60,12 @@ toLowerW w
   | w >= 65 && w <= 90 = w + 32
   | otherwise = w
 
+-- * Word lexing
+
 -- | Run word lexer directly over a ByteString.
+--
+-- >>> runWordLexerBS (C.pack "Hello, world!")
+-- ["hello","world"]
 runWordLexerBS :: ByteString -> [ByteString]
 runWordLexerBS bs = go 0 False 0
   where
@@ -206,7 +214,12 @@ accumStep (AccState !s !l !ctx) bc !i = case (ctx, bc) of
   _ ->
     (Nothing, AccState (if l == 0 then i else s) (l + 1) ctx)
 
+-- * Markup lexing
+
 -- | Run markup lexer directly over a ByteString.
+--
+-- >>> runMarkupLexerBS (C.pack "<p>hi</p>")
+-- [TOpenTag "p",TContent "hi",TCloseTag "p"]
 runMarkupLexerBS :: ByteString -> [MarkupToken]
 runMarkupLexerBS bs = go 0 (AccState 0 0 InContent)
   where
@@ -292,6 +305,12 @@ initOAccState :: OAccState
 initOAccState = OAccState 0 0 InContent
 
 -- | Run via Traced (->) State pipeline.
+--
+-- The state-machine view is: each input byte is classified ('classifyByte'),
+-- paired with its offset and the current context, and fed to 'oAccumStep'.
+-- 'stepMarkupS' compiles this to @WI -> OAccState -> (Maybe ..., OAccState)@,
+-- the shape of a single step in a traced iteration. 'runMarkupStateBS'
+-- unwinds that step over the input.
 runMarkupStateBS :: ByteString -> [MarkupToken]
 runMarkupStateBS bs
   | BS.null bs = []

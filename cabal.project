@@ -1,6 +1,11 @@
 packages:
   circuits-parser.cabal
   ../circuits/circuits.cabal
+  /Users/tonyday567/other/logict/logict.cabal
+  /Users/tonyday567/other/attoparsec/attoparsec.cabal
+  /Users/tonyday567/other/flatparse/flatparse.cabal
+  /Users/tonyday567/other/megaparsec/megaparsec.cabal
+  /Users/tonyday567/other/parsec/parsec.cabal
 
 constraints:
   circuits >= 0.2
