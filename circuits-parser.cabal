@@ -33,6 +33,7 @@ library
     Circuit.Parser.Unified
     Circuit.Parser.Unified.BranchingTraceProbe
     Circuit.Parser.Unified.Examples
+    Circuit.Parser.Unified.LevelsT
     Circuit.Parser.Unified.Net
     Circuit.Parser.Unified.Semiring
     Circuit.Parser.Unified.SemiringProbe
