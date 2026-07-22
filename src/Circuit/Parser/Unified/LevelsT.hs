@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -10,6 +11,11 @@
 -- interleaves outcomes at the same level rather than left-biasing, and the
 -- 'Traced' instance for @Kleisli (LevelsT m)@ enumerates /all/ reachable
 -- 'Right' exits of an @Either@ loop instead of committing to the first one.
+--
+-- The implementation uses the Cayley/Church-encoded representation of
+-- @LevelsT@ (Kidney & Wu, \u00a73.2).  This makes left-nested uses of '<|>'
+-- cheap to construct, and the level-wise merge is the "zip" on the encoded
+-- list implemented with the monadic hyperfunction @HypM@.
 --
 -- The standard 'Circuit.Parser.Unified.<|>' still commits on the first success,
 -- because it does not emit a failure-feedback edge after a success.  Use
@@ -48,9 +54,8 @@ import Circuit.Parser.Unified
 import Control.Applicative (Alternative (..))
 import Control.Arrow (Kleisli (..))
 import Control.Category ((.))
-import Control.Monad (MonadPlus, ap)
+import Control.Monad (MonadPlus, ap, join)
 import Control.Monad.Trans (MonadTrans (..))
-import Data.Bifunctor (bimap)
 import Data.These (These (..))
 import Prelude hiding (id, (.))
 
@@ -61,41 +66,39 @@ type Bag a = [a]
 -- | The levels transformer: a breadth-first list of bags, each bag holding
 -- the outcomes reachable in the same number of steps.
 --
--- This is the direct (non-Cayley) representation from Kidney & Wu.  The
--- efficient zip-like '<|>' can be implemented with hyperfunctions; here we
--- keep the structure explicit so the semantics are easy to read.
+-- This is the Cayley/Church-encoded representation from Kidney & Wu: a value
+-- of type @LevelsT m a@ is a fold over a list of bags of @a@, interspersed
+-- with effects in @m@.  The explicit list-of-bags can be recovered via
+-- 'observeLevelsT'.
 newtype LevelsT m a = LevelsT
-  { runLevelsT :: m (Maybe (Bag a, LevelsT m a))
+  { runLevelsT :: forall r. (Bag a -> m r -> m r) -> m r -> m r
   }
 
 -- | Extract the outcomes level by level, flattening each bag in order.
 observeLevelsT :: (Monad m) => LevelsT m a -> m [a]
-observeLevelsT (LevelsT xs) = xs >>= go
+observeLevelsT xs = runLevelsT xs go (pure [])
   where
-    go Nothing = pure []
-    go (Just (bag, rest)) = (bag ++) <$> observeLevelsT rest
+    go bag rest = (bag ++) <$> rest
 
 -- ---------------------------------------------------------------------------
 -- LevelsT instances
 -- ---------------------------------------------------------------------------
 
-instance (Functor m) => Functor (LevelsT m) where
-  fmap f (LevelsT xs) =
-    LevelsT $ fmap (fmap (bimap (map f) (fmap f))) xs
+instance Functor (LevelsT m) where
+  fmap f xs = LevelsT $ \c n ->
+    runLevelsT xs (c . map f) n
 
 instance (Monad m) => Applicative (LevelsT m) where
-  pure a = LevelsT (pure (Just ([a], emptyLevelsT)))
+  pure a = LevelsT $ \c n -> c [a] n
   (<*>) = ap
 
 instance (Monad m) => Monad (LevelsT m) where
-  LevelsT xs >>= k = LevelsT (xs >>= go)
-    where
-      go Nothing = pure Nothing
-      go (Just (bag, rest)) =
-        runLevelsT (choices k bag `altLevelsT` wrapLevelsT (rest >>= k))
-
-choices :: (Monad m) => (a -> LevelsT m b) -> Bag a -> LevelsT m b
-choices k = foldr (\a acc -> k a `altLevelsT` acc) emptyLevelsT
+  LevelsT xs >>= k = LevelsT $ \c n ->
+    xs
+      ( \bag rest ->
+          runLevelsT (foldr (\a acc -> k a `altLevelsT` acc) emptyLevelsT bag) c rest
+      )
+      n
 
 instance (Monad m) => Alternative (LevelsT m) where
   empty = emptyLevelsT
@@ -104,30 +107,72 @@ instance (Monad m) => Alternative (LevelsT m) where
 instance (Monad m) => MonadPlus (LevelsT m)
 
 instance MonadTrans LevelsT where
-  lift m = LevelsT (fmap (\a -> Just ([a], emptyLevelsT)) m)
+  lift m = LevelsT $ \c n -> m >>= \a -> c [a] n
 
-emptyLevelsT :: (Monad m) => LevelsT m a
-emptyLevelsT = LevelsT (pure Nothing)
+emptyLevelsT :: LevelsT m a
+emptyLevelsT = LevelsT $ \_ n -> n
 
-wrapLevelsT :: (Monad m) => LevelsT m a -> LevelsT m a
-wrapLevelsT xs = LevelsT (pure (Just ([], xs)))
+-- | Monadic hyperfunction, used for the asymptotically optimal level-wise
+-- merge of two 'LevelsT' streams.
+--
+-- This is the @a \u21ac_m b@ type from Kidney & Wu (\u00a73.2): a hyperfunction
+-- where the recursive step is wrapped in the base monad @m@ so that monadic
+-- effects from the two merged streams can be interleaved.
+newtype HypM m a b = HypM
+  { invokeM :: m ((HypM m a b -> a) -> b)
+  }
 
-altLevelsT :: (Monad m) => LevelsT m a -> LevelsT m a -> LevelsT m a
-altLevelsT (LevelsT xs) (LevelsT ys) = LevelsT (liftA2 go xs ys)
-  where
-    go Nothing y = y
-    go x Nothing = x
-    go (Just (bagX, restX)) (Just (bagY, restY)) =
-      Just (bagX ++ bagY, altLevelsT restX restY)
+-- | Level-wise union ("zip with bag union") of two 'LevelsT' streams.
+--
+-- Implemented with the monadic hyperfunction zip from Kidney & Wu
+-- (\u00a73.2).  The construction avoids the quadratic cost of a naive merge on
+-- the Church encoding: '<|>' builds a composition of folds, and the actual
+-- level-walking is pushed to observation time.
+altLevelsT :: forall m a. (Monad m) => LevelsT m a -> LevelsT m a -> LevelsT m a
+altLevelsT xs ys = LevelsT $ \(c :: Bag a -> m r -> m r) (n :: m r) ->
+  let -- The empty left-stream hyperfunction.  When a folded right stream asks
+      -- us to continue with an empty bag, we pass control back to that right
+      -- consumer; when both sides are empty the right base ('emptyR') returns
+      -- the nil @n@.
+      nilL :: HypM m (Bag a -> m r) (m r)
+      nilL = HypM $ pure $ \yk -> yk nilL []
+
+      -- Base value for the right fold: the right stream is empty.  If the left
+      -- stream is also empty at this level we return the nil; otherwise we emit
+      -- the left bag and continue with the left tail.
+      emptyR :: HypM m (Bag a -> m r) (m r) -> Bag a -> m r
+      emptyR _ [] = n
+      emptyR xk x = c x (invokeM xk >>= ($ emptyR))
+
+      -- Fold the left stream into a producer hyperfunction.
+      left :: m ((HypM m (Bag a -> m r) (m r) -> Bag a -> m r) -> m r)
+      left =
+        runLevelsT
+          xs
+          (\x xk -> pure $ \yk -> yk (HypM xk) x)
+          (pure $ \yk -> yk nilL [])
+
+      -- Fold the right stream into a consumer hyperfunction.
+      right :: m (HypM m (Bag a -> m r) (m r) -> Bag a -> m r)
+      right =
+        runLevelsT
+          ys
+          (\y yk -> pure $ \xk x -> c (x ++ y) (join (invokeM xk <*> yk)))
+          (pure emptyR)
+   in join (left <*> right)
 
 -- | Split a 'LevelsT' into its first outcome and the remainder.
 msplitLevelsT :: (Monad m) => LevelsT m a -> m (Maybe (a, LevelsT m a))
-msplitLevelsT (LevelsT xs) = xs >>= go
+msplitLevelsT xs = runLevelsT xs go (pure Nothing)
   where
-    go Nothing = pure Nothing
-    go (Just ([], rest)) = msplitLevelsT rest
-    go (Just (a : as, rest)) =
-      pure (Just (a, LevelsT (pure (Just (as, rest)))))
+    go [] rest = rest
+    go (a : as) rest =
+      pure
+        ( Just
+            ( a,
+              LevelsT $ \c n -> c as (rest >>= maybe n (\(_, remainder) -> runLevelsT remainder c n))
+            )
+        )
 
 -- ---------------------------------------------------------------------------
 -- Branching Either trace for LevelsT
