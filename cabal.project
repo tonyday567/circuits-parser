@@ -8,6 +8,6 @@ packages:
   /Users/tonyday567/other/parsec/parsec.cabal
 
 constraints:
-  circuits >= 0.2
+  circuits >= 0.3
 
 write-ghc-environment-files: always

@@ -69,12 +69,11 @@
 -- algebraic purity for direct inspectability; the "Net" approach pays that
 -- price to push more of the parser vocabulary into the shared algebra.
 --
--- One implementation wrinkle: 'SigBimonoid' currently bundles copy/discard
--- with plus/zero, and the parser plumbing only needs the former.  The orphan
--- 'Dg.MergeZero' instance for @Kleisli Identity@ below is therefore degenerate
--- ('plus' returns its first argument and 'zero' is an error).  A cleaner long
--- term fix is to split 'SigBimonoid' into separate copy/discard and plus/zero
--- signatures upstream in @~/haskell/circuits@.
+-- Implementation note: 'SigBimonoid' used to bundle copy/discard with
+-- plus/zero, and parser plumbing only ever needs copy/discard.  The upstream
+-- split into 'SigCopyDiscard' / 'SigMergeZero' means this module now carries
+-- only the 'Dg.CopyDiscard' instance for @Kleisli Identity@; the degenerate
+-- 'MergeZero' orphan is gone.
 module Circuit.Parser.Unified.Net
   ( -- * Extra signatures
     SigEitherFunctor (..),
@@ -107,9 +106,10 @@ import Circuit qualified as C
 import Circuit.Algebra
   ( Algebra (..),
     (:+:) (..),
-    SigBimonoid (..),
     SigCompose (..),
+    SigCopyDiscard (..),
     SigKnot (..),
+    SigMergeZero (..),
     SigPar (..),
     SigSwap (..),
     Syntax (..),
@@ -177,7 +177,7 @@ data SigBind (f :: Type) (s :: Type) (arr :: Type -> Type -> Type) (rec :: Type 
 -- machinery plus the two universal @Either@ operations and a bind node for
 -- the monadic layer.
 type ParserNetSig f s =
-  SigCompose :+: SigKnot Either :+: SigPar :+: SigSwap :+: SigBimonoid :+: SigEitherFunctor f :+: SigEitherCase :+: SigBind f s
+  SigCompose :+: SigKnot Either :+: SigPar :+: SigSwap :+: SigCopyDiscard :+: SigMergeZero :+: SigEitherFunctor f :+: SigEitherCase :+: SigBind f s
 
 -- | Parser syntax over the extended @AlgNet Either@-style signature with
 -- result type @Either f (a, f)@.
@@ -228,38 +228,32 @@ copyN = Op (R (R (R (R (L SigCopy)))))
 mapRightN ::
   Syntax (ParserNetSig f s) (Kleisli Identity) a b ->
   Syntax (ParserNetSig f s) (Kleisli Identity) (Either f a) (Either f b)
-mapRightN g = Op (R (R (R (R (R (L (EitherMap g)))))))
+mapRightN g = Op (R (R (R (R (R (R (L (EitherMap g))))))))
 
 eitherCaseN ::
   Syntax (ParserNetSig f s) (Kleisli Identity) x b ->
   Syntax (ParserNetSig f s) (Kleisli Identity) y b ->
   Syntax (ParserNetSig f s) (Kleisli Identity) (Either x y) b
-eitherCaseN f g = Op (R (R (R (R (R (R (L (EitherCase f g))))))))
+eitherCaseN f g = Op (R (R (R (R (R (R (R (L (EitherCase f g)))))))))
 
 bindN ::
   Syntax (ParserNetSig f s) (Kleisli Identity) f (Either f (a, f)) ->
   (a -> Syntax (ParserNetSig f s) (Kleisli Identity) f (Either f (b, f))) ->
   Syntax (ParserNetSig f s) (Kleisli Identity) f (Either f (b, f))
-bindN m k = Op (R (R (R (R (R (R (R (Bind m k))))))))
+bindN m k = Op (R (R (R (R (R (R (R (R (Bind m k)))))))))
 
 -- ---------------------------------------------------------------------------
--- Bimonoid instances for the base arrow
+-- Copy/discard instance for the base arrow
 --
--- AlgNet Either's bimonoid generators are interpreted by lifting the source
--- arrow's copy/discard/plus/zero into the target category.  Parser plumbing
--- only ever uses 'copy' and 'discard' (to thread the input stream), so the
--- 'MergeZero' half is never invoked at runtime.  The degenerate instance
--- below is sufficient for the experiment; a cleaner long-term fix is to split
--- 'SigBimonoid' into separate copy/discard and plus/zero signatures upstream.
+-- Parser plumbing only ever uses 'copy' and 'discard' (to thread the input
+-- stream).  'SigMergeZero' is present in the signature because 'AlgNet'
+-- includes it, but no plus/zero nodes are ever constructed, so no corresponding
+-- instance is required.
 -- ---------------------------------------------------------------------------
 
 instance Dg.CopyDiscard (Kleisli Identity) a where
   copy = Kleisli $ \a -> Identity (a, a)
   discard = Kleisli $ \_ -> Identity ()
-
-instance Dg.MergeZero (Kleisli Identity) a where
-  plus = Kleisli $ \(a, _) -> Identity a
-  zero = Kleisli $ \_ -> Identity (error "MergeZero.zero: unreachable in parser plumbing")
 
 -- ---------------------------------------------------------------------------
 -- Execution algebra
