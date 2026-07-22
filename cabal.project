@@ -1,6 +1,7 @@
 packages:
   circuits-parser.cabal
   ../circuits/circuits.cabal
+  ../numhask/numhask.cabal
   /Users/tonyday567/other/logict/logict.cabal
   /Users/tonyday567/other/attoparsec/attoparsec.cabal
   /Users/tonyday567/other/flatparse/flatparse.cabal
