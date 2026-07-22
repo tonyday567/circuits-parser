@@ -2,6 +2,10 @@ packages:
   circuits-parser.cabal
   ../circuits/circuits.cabal
   ../numhask/numhask.cabal
+  ../numhask-diff/numhask-diff.cabal
+  ../harpie/harpie.cabal
+  ../harpie-numhask/harpie-numhask.cabal
+  ../mealy/mealy.cabal
   /Users/tonyday567/other/logict/logict.cabal
   /Users/tonyday567/other/attoparsec/attoparsec.cabal
   /Users/tonyday567/other/flatparse/flatparse.cabal
@@ -10,5 +14,8 @@ packages:
 
 constraints:
   circuits >= 0.3
+
+allow-newer:
+  tdigest:base
 
 write-ghc-environment-files: always
