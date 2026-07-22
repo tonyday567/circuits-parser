@@ -36,6 +36,7 @@ library
     Circuit.Parser.Unified.Net
     Circuit.Parser.Unified.Semiring
     Circuit.Parser.Unified.SemiringProbe
+    Circuit.Parser.Unified.MealyCompiler
     Circuit.Parser.Unified.MealyProbe
     Circuit.Parser.Unified.Syntax
 

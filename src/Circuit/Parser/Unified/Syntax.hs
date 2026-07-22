@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -86,17 +85,21 @@ module Circuit.Parser.Unified.Syntax
     -- * Regex extraction
     Regex (..),
     toRegex,
+
+    -- * Brzozowski derivatives
+    derive,
+    nullableValue,
   )
 where
 
 import Circuit qualified as C
 import Circuit.Algebra
   ( Algebra (..),
-    (:+:) (..),
     SigCompose (..),
     SigKnot (..),
     Syntax (..),
     evalInto,
+    (:+:) (..),
   )
 import Circuit.Category (Category (..), (.>))
 import Circuit.Channel (Traced)
@@ -105,14 +108,14 @@ import Circuit.Parser.Unified
     Uncons (..),
   )
 import Circuit.Parser.Unified qualified as PU
-import Control.Applicative (Alternative (empty, (<|>)))
+import Control.Applicative (Alternative (empty, (<|>)), optional)
 import Control.Arrow (Kleisli (..))
 import Control.Monad (MonadPlus, void)
 import Data.Bifunctor (first)
 import Data.Functor.Identity (Identity (..))
-import Data.These (These (..))
 import Data.Kind (Type)
 import Data.Proxy (Proxy (..))
+import Data.These (These (..))
 import Prelude hiding (id, (.))
 
 -- $setup
@@ -130,8 +133,8 @@ import Prelude hiding (id, (.))
 data SigPrim (f :: Type) (s :: Type) (arr :: Type -> Type -> Type) (rec :: Type -> Type -> Type) (a :: Type) (b :: Type) where
   PrimNext :: SigPrim f s arr rec f (These s f)
   PrimSatisfy :: (s -> Bool) -> SigPrim f s arr rec f (These s f)
-  PrimChar :: Eq s => s -> SigPrim f s arr rec f (These s f)
-  PrimString :: Eq s => [s] -> SigPrim f s arr rec f (These [s] f)
+  PrimChar :: (Eq s) => s -> SigPrim f s arr rec f (These s f)
+  PrimString :: (Eq s) => [s] -> SigPrim f s arr rec f (These [s] f)
   PrimEndOfInput :: SigPrim f s arr rec f (These () f)
   PrimTakeRest :: SigPrim f s arr rec f (These f f)
 
@@ -144,6 +147,7 @@ data SigComb (f :: Type) (s :: Type) (arr :: Type -> Type -> Type) (rec :: Type 
   CombAlt :: rec f (These a f) -> rec f (These a f) -> SigComb f s arr rec f (These a f)
   CombMany :: rec f (These a f) -> SigComb f s arr rec f (These [a] f)
   CombTry :: rec f (These a f) -> SigComb f s arr rec f (These a f)
+  CombFmap :: (a -> b) -> rec f (These a f) -> SigComb f s arr rec f (These b f)
 
 -- | The full parser signature: composition, traced choice, primitives, and
 -- structural combinators.
@@ -185,6 +189,14 @@ instance
 
 -- Helpers that live in the concrete 'Loop' world. They take a 'Proxy s' because
 -- the element type is phantom in the loop representation.
+fmapP ::
+  forall m f a b.
+  (Monad m, Traced Either (Kleisli m)) =>
+  (a -> b) ->
+  C.Loop Either (Kleisli m) f (These a f) ->
+  C.Loop Either (Kleisli m) f (These b f)
+fmapP g p' = p' .> C.Lift (Kleisli (pure . first g))
+
 apP ::
   forall m f s a b.
   (Monad m, Uncons f s, Traced Either (Kleisli m)) =>
@@ -193,9 +205,10 @@ apP ::
   C.Loop Either (Kleisli m) f (These a f) ->
   C.Loop Either (Kleisli m) f (These b f)
 apP _ pf pa = C.Lift $ Kleisli $ \s -> do
-  let app g s' = runKleisli (C.run pa) s' >>= \case
-        That _ -> pure (That s)
-        res -> pure (first g res)
+  let app g s' =
+        runKleisli (C.run pa) s' >>= \case
+          That _ -> pure (That s)
+          res -> pure (first g res)
   runKleisli (C.run pf) s >>= \case
     That _ -> pure (That s)
     This g -> app g (nil @f @s)
@@ -223,7 +236,7 @@ manyP ::
   Proxy s ->
   C.Loop Either (Kleisli m) f (These a f) ->
   C.Loop Either (Kleisli m) f (These [a] f)
-manyP pxy p = someP pxy p `altP` (C.Lift $ Kleisli $ \s -> pure (These [] s))
+manyP pxy p = someP pxy p `altP` C.Lift (Kleisli $ \s -> pure (These [] s))
 
 someP ::
   forall m f s a.
@@ -232,9 +245,6 @@ someP ::
   C.Loop Either (Kleisli m) f (These a f) ->
   C.Loop Either (Kleisli m) f (These [a] f)
 someP pxy p = apP pxy (fmapP (:) p) (manyP pxy p)
-  where
-    fmapP :: (a -> b) -> C.Loop Either (Kleisli m) f (These a f) -> C.Loop Either (Kleisli m) f (These b f)
-    fmapP g p' = p' .> C.Lift (Kleisli (pure . first g))
 
 tryP ::
   forall m f a.
@@ -268,11 +278,11 @@ runParserSyntaxIdentity p = PU.runParserIdentity (runParserSyntax p)
 -- Instances
 -- ---------------------------------------------------------------------------
 
-instance Uncons f s => Functor (ParserSyntax f s) where
+instance (Uncons f s) => Functor (ParserSyntax f s) where
   fmap g (ParserSyntax p) =
-    ParserSyntax (p .> Lift (Kleisli (pure . first g)))
+    ParserSyntax (Op (R (R (R (CombFmap g p)))))
 
-instance Uncons f s => Applicative (ParserSyntax f s) where
+instance (Uncons f s) => Applicative (ParserSyntax f s) where
   pure a = ParserSyntax $ Lift $ Kleisli $ \x -> pure (These a x)
   ParserSyntax pf <*> ParserSyntax pa =
     ParserSyntax $ Op $ R $ R $ R $ CombAp pf pa
@@ -291,10 +301,11 @@ instance
   Algebra (SigComb f s) (Kleisli Identity) (C.Loop Either (Kleisli m))
   where
   alg _ rec (CombAp pf pa) = apP (Proxy @s) (rec pf) (rec pa)
-  alg _ rec (CombBind p k) = bindP (Proxy @s) (rec p) (\a -> rec (k a))
+  alg _ rec (CombBind p k) = bindP (Proxy @s) (rec p) (rec . k)
   alg _ rec (CombAlt p1 p2) = altP (rec p1) (rec p2)
   alg _ rec (CombMany p) = manyP (Proxy @s) (rec p)
   alg _ rec (CombTry p) = tryP (rec p)
+  alg _ rec (CombFmap g p) = fmapP g (rec p)
 
 bindP ::
   forall m f s a b.
@@ -329,10 +340,10 @@ anyTokenS = nextS
 satisfyS :: (s -> Bool) -> ParserSyntax f s s
 satisfyS p = ParserSyntax $ Op $ R $ R $ L (PrimSatisfy p)
 
-charS :: Eq s => s -> ParserSyntax f s s
+charS :: (Eq s) => s -> ParserSyntax f s s
 charS c = ParserSyntax $ Op $ R $ R $ L (PrimChar c)
 
-stringS :: Eq s => [s] -> ParserSyntax f s [s]
+stringS :: (Eq s) => [s] -> ParserSyntax f s [s]
 stringS cs = ParserSyntax $ Op $ R $ R $ L (PrimString cs)
 
 endOfInputS :: ParserSyntax f s ()
@@ -349,7 +360,7 @@ tryS :: ParserSyntax f s a -> ParserSyntax f s a
 tryS (ParserSyntax p) = ParserSyntax $ Op $ R $ R $ R $ CombTry p
 
 optionalS :: (Uncons f s) => ParserSyntax f s a -> ParserSyntax f s (Maybe a)
-optionalS p = (Just <$> p) <|> pure Nothing
+optionalS = optional
 
 manyS :: ParserSyntax f s a -> ParserSyntax f s [a]
 manyS (ParserSyntax p) = ParserSyntax $ Op $ R $ R $ R $ CombMany p
@@ -467,6 +478,7 @@ firstSetSyntax (Op op) = case op of
     CombAlt p1 p2 -> firstSetSyntax p1 `unionFS` firstSetSyntax p2
     CombMany p -> FirstSet True (firstKind (firstSetSyntax p))
     CombTry p -> firstSetSyntax p
+    CombFmap _ p -> firstSetSyntax p
 
 -- | Compute the first-set of a parser syntax tree.
 firstSet :: ParserSyntax f s a -> FirstSet s
@@ -495,6 +507,7 @@ unreachableBranches = go [] . unParserSyntax
         CombBind _ _ -> []
         CombMany p -> go acc p
         CombTry p -> go acc p
+        CombFmap _ p -> go acc p
 
     check :: FirstSet s -> FirstSet s -> [String]
     check left right =
@@ -504,7 +517,6 @@ unreachableBranches = go [] . unParserSyntax
         (FSUniversal, FSUniversal) ->
           ["right branch can never fire (left consumes any token)"]
         _ -> []
-
 
 -- ---------------------------------------------------------------------------
 -- Regex extraction
@@ -521,7 +533,7 @@ data Regex s
   | RESeq (Regex s) (Regex s)
   | REStar (Regex s)
 
-instance Show s => Show (Regex s) where
+instance (Show s) => Show (Regex s) where
   show REEmpty = "REEmpty"
   show REAny = "REAny"
   show (REChar c) = "REChar " ++ show c
@@ -554,3 +566,115 @@ toRegex = go . unParserSyntax
         CombAlt p1 p2 -> REAlt <$> go p1 <*> go p2
         CombMany p -> REStar <$> go p
         CombTry p -> go p
+        CombFmap _ p -> go p
+
+-- ---------------------------------------------------------------------------
+-- Brzozowski derivatives
+-- ---------------------------------------------------------------------------
+
+-- | The parser that remains after consuming one token.
+--
+-- This is the core of the coalgebraic compiler: a 'Mealy' machine state is a
+-- parser syntax tree, and consuming a token transitions to its derivative.
+-- The implementation covers the applicative + alternative + 'many' fragment;
+-- 'CombBind' is rejected because it is dependent composition.
+derive :: (Eq s, Uncons f s) => s -> ParserSyntax f s a -> ParserSyntax f s a
+derive c (ParserSyntax syn) = ParserSyntax (deriveSyntax c syn)
+
+-- | Syntax-level derivative.
+deriveSyntax ::
+  forall s f a.
+  (Eq s, Uncons f s) =>
+  s ->
+  Syntax (ParserSyntaxSig f s) (Kleisli Identity) f (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Kleisli Identity) f (These a f)
+deriveSyntax c syn = case syn of
+  Lift (Kleisli _) -> emptyResultSyntax
+  Op op -> case op of
+    L (SigCompose _ _) ->
+      error "deriveSyntax: explicit SigCompose not supported; use fmap/Applicative/Alternative constructors"
+    R (L (SigKnot _)) -> error "deriveSyntax: SigKnot not supported"
+    R (R (L prim)) -> derivePrim c prim
+    R (R (R comb)) -> deriveComb c comb
+
+-- | Derivative of a primitive.
+derivePrim ::
+  forall s f a arr.
+  (Eq s) =>
+  s ->
+  SigPrim f s arr (Syntax (ParserSyntaxSig f s) (Kleisli Identity)) f (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Kleisli Identity) f (These a f)
+derivePrim c prim = case prim of
+  PrimNext -> pureSyntax c
+  PrimSatisfy p -> if p c then pureSyntax c else emptyResultSyntax
+  PrimChar d -> if c == d then pureSyntax c else emptyResultSyntax
+  PrimString [] -> emptyResultSyntax
+  PrimString (d : ds) ->
+    if c == d
+      then fmapSyntax (d :) (stringSyntax ds)
+      else emptyResultSyntax
+  PrimEndOfInput -> emptyResultSyntax
+  PrimTakeRest -> emptyResultSyntax
+
+-- | Derivative of a combinator.
+deriveComb ::
+  forall s f a arr.
+  (Eq s, Uncons f s) =>
+  s ->
+  SigComb f s arr (Syntax (ParserSyntaxSig f s) (Kleisli Identity)) f (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Kleisli Identity) f (These a f)
+deriveComb c comb = case comb of
+  CombAp pf pa ->
+    let left = Op (R (R (R (CombAp (deriveSyntax c pf) pa))))
+        right = case nullableValue (ParserSyntax pf) of
+          Just g -> fmapSyntax g (deriveSyntax c pa)
+          Nothing -> emptyResultSyntax
+     in Op (R (R (R (CombAlt left right))))
+  CombBind _ _ -> error "deriveComb: CombBind not supported"
+  CombAlt p1 p2 ->
+    Op (R (R (R (CombAlt (deriveSyntax c p1) (deriveSyntax c p2)))))
+  CombMany p ->
+    Op
+      ( R
+          ( R
+              ( R
+                  ( CombAp
+                      (fmapSyntax (:) (deriveSyntax c p))
+                      (Op (R (R (R (CombMany p)))))
+                  )
+              )
+          )
+      )
+  CombTry p -> deriveSyntax c p
+  CombFmap g p -> fmapSyntax g (deriveSyntax c p)
+
+-- | Syntax tree that always fails, returning the input stream unchanged.
+emptyResultSyntax :: Syntax (ParserSyntaxSig f s) (Kleisli Identity) f (These a f)
+emptyResultSyntax = Lift (Kleisli (Identity . That))
+
+-- | Syntax tree that returns a constant value without consuming input.
+pureSyntax :: a -> Syntax (ParserSyntaxSig f s) (Kleisli Identity) x (These a x)
+pureSyntax a = Lift (Kleisli (Identity . These a))
+
+-- | Lift a pure function over the result of a syntax tree using the structural
+-- 'CombFmap' node.
+fmapSyntax ::
+  (a -> b) ->
+  Syntax (ParserSyntaxSig f s) (Kleisli Identity) f (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Kleisli Identity) f (These b f)
+fmapSyntax g syn = Op (R (R (R (CombFmap g syn))))
+
+-- | Syntax tree for matching a fixed string.
+stringSyntax ::
+  (Eq s) => [s] -> Syntax (ParserSyntaxSig f s) (Kleisli Identity) f (These [s] f)
+stringSyntax cs = Op (R (R (L (PrimString cs))))
+
+-- | Check whether a parser can succeed without consuming any input, and if
+-- so extract the value it would return.
+nullableValue :: forall f s a. (Uncons f s) => ParserSyntax f s a -> Maybe a
+nullableValue p
+  | nullable (firstSet p) =
+      case runParserSyntaxIdentity p (nil @f @s) of
+        These a _ -> Just a
+        _ -> Nothing
+  | otherwise = Nothing
