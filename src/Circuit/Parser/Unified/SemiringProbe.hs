@@ -1,5 +1,4 @@
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -21,6 +20,7 @@ module Circuit.Parser.Unified.SemiringProbe
     Semiring (..),
     StarSemiring (..),
     Count (..),
+    Weighted (..),
 
     -- * Constrained Kleisli source
     CKleisli (..),
@@ -30,8 +30,11 @@ module Circuit.Parser.Unified.SemiringProbe
     runEqParser,
     next,
     satisfy,
+    satisfyW,
     char,
+    charW,
     string,
+    stringW,
     endOfInput,
     pureP,
     mapP,
@@ -46,15 +49,25 @@ module Circuit.Parser.Unified.SemiringProbe
     -- * Weighted relation target
     SemiringKleisli (..),
     altW,
+    altWeighted,
     runSemiringParser,
+    runWeightedParser,
     totalWeight,
     traceCyclic,
+
+    -- * Differentiable semiring carrier
+    Dual2 (..),
+
+    -- * Tropical semiring carrier
+    Tropical (..),
 
     -- * Demos
     demo,
     cyclicDemo,
     manyCharA,
     manyCharAReach,
+    outsideDemo,
+    tropicalDemo,
   )
 where
 
@@ -62,56 +75,27 @@ import Circuit qualified as C
 import Circuit.Category (Category (..), ObDict (..), (.>))
 import Circuit.Channel (Channel (..), Strength (..), Traced (..))
 import Circuit.Parser.Unified (Uncons (..))
+import Circuit.Parser.Unified.Semiring
+  ( Count (..),
+    Dual2 (..),
+    Semiring (..),
+    StarSemiring (..),
+    Tropical (..),
+    Weighted (..),
+  )
 import Circuit.Tensor (Action (..), Tensor (..))
 import Control.Monad (MonadPlus (..), (<=<))
 import Data.Bifunctor (first)
 import Data.Bool (bool)
 import Data.Kind (Constraint, Type)
-import Data.List (elemIndex, nub, sortOn)
+import Data.List (elemIndex, sortOn)
 import Data.Maybe (fromMaybe)
 import Data.These (These (..), these)
 import Prelude hiding (id, (.))
 
--- ---------------------------------------------------------------------------
--- Tiny semiring class
--- ---------------------------------------------------------------------------
-
--- | A commutative semiring with additive identity 'zeroR' and multiplicative
--- identity 'oneR'.
-class Semiring r where
-  zeroR :: r
-  oneR :: r
-  plusR :: r -> r -> r
-  timesR :: r -> r -> r
-
--- | Semirings with a closure operation @star x = 1 + x + x*x + ...@.
-class Semiring r => StarSemiring r where
-  star :: r -> r
-
-instance Semiring Bool where
-  zeroR = False
-  oneR = True
-  plusR = (||)
-  timesR = (&&)
-
-instance StarSemiring Bool where
-  star _ = True
-
--- | Counting semiring: number of derivations.  It is /not/ a star semiring in
--- general because feedback cycles can yield infinitely many derivations; the
--- 'StarSemiring' instance below handles only the acyclic case.
-newtype Count = Count Int
-  deriving (Eq, Ord, Show, Num)
-
-instance Semiring Count where
-  zeroR = Count 0
-  oneR = Count 1
-  plusR (Count x) (Count y) = Count (x + y)
-  timesR (Count x) (Count y) = Count (x * y)
-
-instance StarSemiring Count where
-  star (Count 0) = Count 1
-  star _ = error "SemiringProbe.Count.star: infinite derivations"
+-- Semiring classes, carriers and the 'Weighted' source monad live in
+-- "Circuit.Parser.Unified.Semiring" so that 'Weighted' can define its
+-- 'Alternative' instance without colliding with the local '(<|>)' combinator.
 
 -- ---------------------------------------------------------------------------
 -- Constrained Kleisli arrow
@@ -138,18 +122,24 @@ instance (Monad m) => Channel (,) (CKleisli m Eq) where
   withTensorOb ObDict ObDict k = k
 
 instance (Monad m) => Channel Either (CKleisli m Eq) where
-  assoc = CKleisli $ pure . \case
-    Left (Left a) -> Left a
-    Left (Right b) -> Right (Left b)
-    Right c -> Right (Right c)
-  assoc' = CKleisli $ pure . \case
-    Left a -> Left (Left a)
-    Right (Left b) -> Left (Right b)
-    Right (Right c) -> Right c
-  slide = CKleisli $ pure . \case
-    Left a -> Right (Left a)
-    Right (Left b) -> Left b
-    Right (Right c) -> Right (Right c)
+  assoc =
+    CKleisli $
+      pure . \case
+        Left (Left a) -> Left a
+        Left (Right b) -> Right (Left b)
+        Right c -> Right (Right c)
+  assoc' =
+    CKleisli $
+      pure . \case
+        Left a -> Left (Left a)
+        Right (Left b) -> Left (Right b)
+        Right (Right c) -> Right c
+  slide =
+    CKleisli $
+      pure . \case
+        Left a -> Right (Left a)
+        Right (Left b) -> Left b
+        Right (Right c) -> Right (Right c)
   withTensorOb ObDict ObDict k = k
 
 instance (Monad m) => Strength (,) (CKleisli m Eq) where
@@ -218,6 +208,42 @@ string = go []
     go :: [s] -> [s] -> EqParser m f s [s]
     go acc [] = pureP (reverse acc)
     go acc (c : cs) = bindP (char c) (\x -> go (x : acc) cs)
+
+-- | Consume one element and attach a semiring weight.
+--
+-- A weight of 'zeroR' is treated as failure: no result is emitted.
+satisfyW ::
+  forall f s r.
+  (Uncons f s, Semiring r, Eq r) =>
+  (s -> r) ->
+  EqParser (Weighted r) f s s
+satisfyW w = EqParser $ C.Lift $ CKleisli $ \f ->
+  Weighted $ case uncons f of
+    That _ -> []
+    This s -> [(This s, w s) | w s /= zeroR]
+    These s f' -> [(These s f', w s) | w s /= zeroR]
+
+-- | Match a specific element, weighted.
+charW ::
+  forall f s r.
+  (Uncons f s, Eq s, Semiring r, Eq r) =>
+  (s -> r) ->
+  s ->
+  EqParser (Weighted r) f s s
+charW w c = satisfyW (\s -> if s == c then w s else zeroR)
+
+-- | Match a sequence of elements, weighted.
+stringW ::
+  forall f s r.
+  (Uncons f s, Eq s, Eq f, Semiring r, Eq r) =>
+  (s -> r) ->
+  [s] ->
+  EqParser (Weighted r) f s [s]
+stringW w = go []
+  where
+    go :: [s] -> [s] -> EqParser (Weighted r) f s [s]
+    go acc [] = pureP (reverse acc)
+    go acc (c : cs) = bindP (charW w c) (\x -> go (x : acc) cs)
 
 -- | Succeed only at the end of input.
 endOfInput :: forall m f s. (Monad m, Uncons f s) => EqParser m f s ()
@@ -354,23 +380,24 @@ newtype SemiringKleisli r a b = SemiringKleisli
   { runSemiringKleisli :: a -> [(b, r)]
   }
 
-instance (Semiring r) => Category (SemiringKleisli r) where
+instance (Semiring r, Eq r) => Category (SemiringKleisli r) where
   type Ob (SemiringKleisli r) a = Eq a
   id = SemiringKleisli $ \a -> [(a, oneR)]
   SemiringKleisli g . SemiringKleisli f =
     SemiringKleisli $ \a ->
-      [ (c, timesR w1 w2)
+      dupDel
+        [ (c, timesR w1 w2)
         | (b, w1) <- f a,
           (c, w2) <- g b
-      ]
+        ]
 
-instance (Semiring r) => Channel (,) (SemiringKleisli r) where
+instance (Semiring r, Eq r) => Channel (,) (SemiringKleisli r) where
   assoc = SemiringKleisli $ \((a, b), c) -> [((a, (b, c)), oneR)]
   assoc' = SemiringKleisli $ \(a, (b, c)) -> [(((a, b), c), oneR)]
   slide = SemiringKleisli $ \(a, (b, c)) -> [((b, (a, c)), oneR)]
   withTensorOb ObDict ObDict k = k
 
-instance (Semiring r) => Channel Either (SemiringKleisli r) where
+instance (Semiring r, Eq r) => Channel Either (SemiringKleisli r) where
   assoc = SemiringKleisli $ \case
     Left (Left a) -> [(Left a, oneR)]
     Left (Right b) -> [(Right (Left b), oneR)]
@@ -385,13 +412,13 @@ instance (Semiring r) => Channel Either (SemiringKleisli r) where
     Right (Right c) -> [(Right (Right c), oneR)]
   withTensorOb ObDict ObDict k = k
 
-instance (Semiring r) => Strength (,) (SemiringKleisli r) where
+instance (Semiring r, Eq r) => Strength (,) (SemiringKleisli r) where
   strength f = SemiringKleisli $ \(a, b) ->
     [ ((a, c), w) | (c, w) <- runSemiringKleisli f b
     ]
   withStrengthOb ObDict ObDict ObDict k = k
 
-instance (Semiring r) => Strength Either (SemiringKleisli r) where
+instance (Semiring r, Eq r) => Strength Either (SemiringKleisli r) where
   strength f = SemiringKleisli $ \case
     Left a -> [(Left a, oneR)]
     Right b ->
@@ -399,22 +426,35 @@ instance (Semiring r) => Strength Either (SemiringKleisli r) where
       ]
   withStrengthOb ObDict ObDict ObDict k = k
 
-instance (Semiring r) => Tensor (,) (SemiringKleisli r) where
+instance (Semiring r, Eq r) => Tensor (,) (SemiringKleisli r) where
   par f g = SemiringKleisli $ \(a, c) ->
     [ ((b, d), timesR w1 w2)
-      | (b, w1) <- runSemiringKleisli f a,
-        (d, w2) <- runSemiringKleisli g c
+    | (b, w1) <- runSemiringKleisli f a,
+      (d, w2) <- runSemiringKleisli g c
     ]
   unitl = SemiringKleisli $ \((), a) -> [(a, oneR)]
   unitl' = SemiringKleisli $ \a -> [(((), a), oneR)]
   unitr = SemiringKleisli $ \(a, ()) -> [(a, oneR)]
   unitr' = SemiringKleisli $ \a -> [((a, ()), oneR)]
 
-instance (Semiring r) => Action (,) (SemiringKleisli r) where
+instance (Semiring r, Eq r) => Action (,) (SemiringKleisli r) where
   swap = SemiringKleisli $ \(a, b) -> [((b, a), oneR)]
 
 sumR :: (Semiring r) => [r] -> r
 sumR = foldr plusR zeroR
+
+-- | Merge duplicate outputs ('dup') and drop zero weights ('del').
+--
+-- This is the K&W quotient discipline made explicit: a weighted bag is in
+-- normal form when each output appears at most once with a non-zero weight.
+-- The order of first occurrence is preserved (commutativity is not forced).
+dupDel :: (Eq b, Semiring r, Eq r) => [(b, r)] -> [(b, r)]
+dupDel = filter ((/= zeroR) . snd) . foldl' insert []
+  where
+    insert [] y = [y]
+    insert ((x, w) : xs) (y, wy)
+      | x == y = (x, plusR w wy) : xs
+      | otherwise = (x, w) : insert xs (y, wy)
 
 -- | Reflexive-transitive closure of an n x n matrix over a star semiring.
 --
@@ -431,7 +471,7 @@ matrixClosure a = addIdentity (foldl' update a [0 .. n - 1])
       let skk = star ((m !! k) !! k)
        in [ [ ((m !! i) !! j)
                 `plusR` (((m !! i) !! k) `timesR` skk `timesR` ((m !! k) !! j))
-              | j <- [0 .. n - 1]
+            | j <- [0 .. n - 1]
             ]
           | i <- [0 .. n - 1]
           ]
@@ -439,9 +479,9 @@ matrixClosure a = addIdentity (foldl' update a [0 .. n - 1])
     addIdentity :: [[r]] -> [[r]]
     addIdentity m =
       [ [ if i == j then oneR `plusR` ((m !! i) !! j) else (m !! i) !! j
-          | j <- [0 .. n - 1]
+        | j <- [0 .. n - 1]
         ]
-        | i <- [0 .. n - 1]
+      | i <- [0 .. n - 1]
       ]
 
 -- | Collect all feedback states reachable from an initial list of states.
@@ -474,40 +514,32 @@ traceCyclic (SemiringKleisli f) = SemiringKleisli $ \b0 -> solve (Right b0)
     solve :: Either a b -> [(c, r)]
     solve start =
       let startEdges = f start
-          startLefts = [ (a, w) | (Left a, w) <- startEdges ]
-          startOuts = [ (c, w) | (Right c, w) <- startEdges ]
-          feedbackEdges a' = [ (a'', w) | (Left a'', w) <- f (Left a') ]
+          startLefts = [(a, w) | (Left a, w) <- startEdges]
+          startOuts = [(c, w) | (Right c, w) <- startEdges]
+          feedbackEdges a' = [(a'', w) | (Left a'', w) <- f (Left a')]
           leftStates = feedbackClosure feedbackEdges (map fst startLefts)
           idx a = fromMaybe (error "traceCyclic: feedback state escaped closure") (elemIndex a leftStates)
           n = length leftStates
           adj =
-            [ [ sumR [ w | (Left a', w) <- f (Left ai), a' == aj ]
-                | aj <- leftStates
+            [ [ sumR [w | (Left a', w) <- f (Left ai), a' == aj]
+              | aj <- leftStates
               ]
-              | ai <- leftStates
+            | ai <- leftStates
             ]
           closure = matrixClosure adj
           leftOuts j =
             [ (outC, w)
-              | (Right outC, w) <- f (Left (leftStates !! j))
+            | (Right outC, w) <- f (Left (leftStates !! j))
             ]
-          allOuts =
-            nub $
-              map fst startOuts
-                ++ map fst (concat [ leftOuts j | j <- [0 .. n - 1] ])
-          total outC =
-            let base = sumR [ w | (c, w) <- startOuts, c == outC ]
-                via =
-                  sumR
-                    [ w1 `timesR` ((closure !! i) !! j) `timesR` w2
-                      | (a, w1) <- startLefts,
-                        let i = idx a,
-                        j <- [0 .. n - 1],
-                        (c, w2) <- leftOuts j,
-                        c == outC
-                    ]
-             in base `plusR` via
-       in [ (outC, total outC) | outC <- allOuts, total outC /= zeroR ]
+          rawOuts =
+            startOuts
+              ++ [ (c, w1 `timesR` ((closure !! i) !! j) `timesR` w2)
+                 | (a, w1) <- startLefts,
+                   let i = idx a,
+                   j <- [0 .. n - 1],
+                   (c, w2) <- leftOuts j
+                 ]
+       in dupDel rawOuts
 
 instance (StarSemiring r, Eq r) => Traced Either (SemiringKleisli r) where
   trace = traceCyclic
@@ -534,6 +566,27 @@ altW (EqParser p1) (EqParser p2) = EqParser $ C.trace $ C.Lift $ CKleisli $ \cas
      in [Left s] ++ map Right successes
   Left s -> map Right (runCKleisli (C.run p2) s)
 
+-- | Weighted choice for a 'Weighted' source monad.
+--
+-- Like 'altW', but preserves primitive weights: each left success exits with
+-- its own weight, and the fallback to the right branch is emitted with weight
+-- 'oneR'.  This is the correct semiring alternative for weighted parsers; the
+-- generic '(<|>)' inherits the success weight on its fallback edge and
+-- overcounts.
+altWeighted ::
+  forall f s a r.
+  (Eq f, Eq a, Semiring r) =>
+  EqParser (Weighted r) f s a ->
+  EqParser (Weighted r) f s a ->
+  EqParser (Weighted r) f s a
+altWeighted (EqParser p1) (EqParser p2) = EqParser $ C.trace $ C.Lift $ CKleisli $ \case
+  Right s ->
+    let Weighted ress = runCKleisli (C.run p1) s
+        successes = [(res, w) | (res, w) <- ress, not (isThat res)]
+     in Weighted $ (Left s, oneR) : map (first Right) successes
+  Left s ->
+    Weighted $ map (first Right) (runWeighted (runCKleisli (C.run p2) s))
+
 -- | Natural transformation from source to target dictionaries.
 --
 -- Both categories have 'Ob = Eq', so the transformer is the identity.
@@ -550,11 +603,29 @@ runSemiringParser ::
   EqParser [] f s a ->
   f ->
   [(These a f, r)]
-runSemiringParser p input =
-  runSemiringKleisli (C.bind eqDict emb (unEqParser p)) input
+runSemiringParser p =
+  runSemiringKleisli (C.bind eqDict emb (unEqParser p))
   where
     emb :: CKleisli [] Eq C.:~> SemiringKleisli r
-    emb (CKleisli g) = SemiringKleisli $ \x -> [ (y, oneR) | y <- g x ]
+    emb (CKleisli g) = SemiringKleisli $ \x -> [(y, oneR) | y <- g x]
+
+-- | Natural transformation from the weighted source to the weighted target.
+eqDictWeighted :: ObDict (CKleisli (Weighted r) Eq) a -> ObDict (SemiringKleisli r) a
+eqDictWeighted ObDict = ObDict
+
+-- | Interpret a weighted 'EqParser' into the weighted relation target.
+-- Each primitive contributes its own weight; alternatives sum over paths.
+runWeightedParser ::
+  forall r f s a.
+  (StarSemiring r, Eq r, Semiring r, Uncons f s, Eq f, Eq s, Eq a) =>
+  EqParser (Weighted r) f s a ->
+  f ->
+  [(These a f, r)]
+runWeightedParser p =
+  runSemiringKleisli (C.bind eqDictWeighted emb (unEqParser p))
+  where
+    emb :: CKleisli (Weighted r) Eq C.:~> SemiringKleisli r
+    emb (CKleisli g) = SemiringKleisli (runWeighted . g)
 
 -- | Sum the weights for all outputs, ignoring the outputs themselves.
 totalWeight :: (Semiring r) => [(x, r)] -> r
@@ -609,3 +680,59 @@ manyCharAReach s = any snd (runSemiringParser @Bool p s)
   where
     p :: EqParser [] String Char [Char]
     p = many (char 'a')
+
+-- ---------------------------------------------------------------------------
+-- Differentiable semiring carrier: outside = backprop of inside
+-- ---------------------------------------------------------------------------
+
+-- | Weight function for a two-token alphabet.  Parameter A controls the weight
+-- of 'a'; parameter B controls the weight of 'b'.
+abWeights :: Char -> Dual2
+abWeights 'a' = Dual2 2 1 0
+abWeights 'b' = Dual2 3 0 1
+abWeights _ = zeroR
+
+-- | Outside = backprop-of-inside smoke test.
+--
+-- Parser: "ab" | "a" on input "ab".  The inside value is @wa * wb@; the
+-- gradients are @wb@ w.r.t. @wa@ and @wa@ w.r.t. @wb@.  Those gradients are
+-- exactly the outside values: the total weight of all derivations that use
+-- the respective primitive.
+--
+-- With the test weights @wa = 2@, @wb = 3@ the inside value is 6 and the
+-- outside values are 3 and 2.
+--
+-- >>> outsideDemo
+-- Dual2 {dualValue = 6.0, dualGradA = 3.0, dualGradB = 2.0}
+-- Dual2 {dualValue = 2.0, dualGradA = 1.0, dualGradB = 0.0}
+outsideDemo :: IO ()
+outsideDemo = do
+  let p = stringW abWeights "ab" `altWeighted` stringW abWeights "a" :: EqParser (Weighted Dual2) String Char String
+  case runWeightedParser p "ab" of
+    [(These "ab" "", d), (These "a" "b", d')] -> do
+      print d
+      print d'
+    other -> print other
+
+-- ---------------------------------------------------------------------------
+-- Tropical semiring carrier: Viterbi / best-first parsing
+-- ---------------------------------------------------------------------------
+
+-- | Cost function for a two-token alphabet.
+abCosts :: Char -> Tropical
+abCosts 'a' = Tropical 1.5
+abCosts 'b' = Tropical 2.0
+abCosts _ = zeroR
+
+-- | Tropical / Viterbi smoke test.
+--
+-- Parser: "ab" | "a" on input "ab".  The derivation costs are the sums of
+-- primitive costs; the tropical inside value is the minimum.  Sorting the
+-- results by cost gives a min-cost-first view of the parse forest.
+--
+-- >>> tropicalDemo
+-- [(These "a" "b",1.5),(These "ab" "",3.5)]
+tropicalDemo :: IO ()
+tropicalDemo = do
+  let p = stringW abCosts "ab" `altWeighted` stringW abCosts "a" :: EqParser (Weighted Tropical) String Char String
+  print $ sortOn snd (runWeightedParser p "ab")
