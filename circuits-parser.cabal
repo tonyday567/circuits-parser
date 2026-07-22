@@ -31,6 +31,7 @@ library
     Circuit.Parser.Primitives
     Circuit.Parser.Token
     Circuit.Parser.Unified
+    Circuit.Parser.Unified.BranchingTraceProbe
     Circuit.Parser.Unified.Examples
     Circuit.Parser.Unified.Net
     Circuit.Parser.Unified.Syntax
