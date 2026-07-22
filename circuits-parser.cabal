@@ -39,6 +39,7 @@ library
     Circuit.Parser.Unified.MealyCompiler
     Circuit.Parser.Unified.MealyProbe
     Circuit.Parser.Unified.Syntax
+    Circuit.Parser.Unified.WeightedDiffMealy
 
   build-depends:
     base >=4.20 && <5,
