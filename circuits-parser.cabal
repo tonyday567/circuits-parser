@@ -32,6 +32,7 @@ library
     Circuit.Parser.Token
     Circuit.Parser.Unified
     Circuit.Parser.Unified.Examples
+    Circuit.Parser.Unified.Net
     Circuit.Parser.Unified.Syntax
 
   build-depends:
