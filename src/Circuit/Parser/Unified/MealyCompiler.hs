@@ -1,6 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -19,6 +18,12 @@
 -- composition.  Explicit 'SigCompose' nodes are also rejected; use the
 -- 'Functor'/'Applicative'/'Alternative' constructors instead.
 --
+-- The differentiable version uses the same derivative coalgebra, but the
+-- machine carries an accumulated semiring weight and a caller-supplied
+-- differentiable token-weight function.  Extraction multiplies the accumulated
+-- weight by the nullable weight of the current derivative, so the 'DiffMealy'
+-- scan gives the inside value and its gradient w.r.t. the parameters.
+--
 -- === doctests
 --
 -- >>> import Data.Mealy (scan, fold)
@@ -33,32 +38,41 @@
 --
 -- >>> scan (compileMealy (manyS (charS 'a') :: ParserSyntax String Char String)) "aaab"
 -- [Just "a",Just "aa",Just "aaa",Nothing]
+--
+-- >>> mealyCompilerOutsideDemo
+-- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
+-- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
 module Circuit.Parser.Unified.MealyCompiler
   ( -- * Plain Mealy compiler
     compileMealy,
     compileMealyWithInput,
 
-    -- * Differentiable machine (stub)
-    Token (..),
-    AdditiveSyntax (..),
-    compileDiffMealyStub,
+    -- * Differentiable machine
+    DiffState (..),
+    compileDiffMealy,
+
+    -- * Demo
+    mealyCompilerOutsideDemo,
   )
 where
 
 import Circuit.Parser.Unified (Uncons (..))
+import Circuit.Parser.Unified.MealyProbe (ABParam (..), Token (..), paramFold)
 import Circuit.Parser.Unified.Syntax
   ( ParserSyntax (..),
     derive,
     nullableValue,
+    stringS,
   )
-import Control.Applicative (Alternative (empty))
+import Control.Applicative (Alternative (empty), (<|>))
+import Data.Maybe (fromMaybe)
 import Data.Mealy (Mealy (..))
 import Data.Mealy.Diff (DiffMealy (..))
 import Data.Proxy (Proxy (..))
 import Data.These (These (..))
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
-import NumHask.Diff (Diff' (..))
+import NumHask.Diff (Diff, Diff' (..))
 import Prelude
 
 -- $setup
@@ -121,61 +135,119 @@ compileMealyWithInput input p0 = Mealy inject step extract
     extract (p, rest) = (,rest) <$> nullableValue p
 
 -- ---------------------------------------------------------------------------
--- Differentiable machine stub
+-- Differentiable machine
 -- ---------------------------------------------------------------------------
 
--- | A token wrapper identical to the one in "Circuit.Parser.Unified.MealyProbe".
---
--- Characters are not parameters, so addition keeps the original token.
-newtype Token = Token {unToken :: Char}
-  deriving newtype (Eq, Show)
+-- | State of the differentiable machine: an accumulated weight and the current
+-- derivative.  The 'Maybe' mode makes the additive instance easy: 'zero' is
+-- "no active parse" and addition keeps the left-hand mode.
+newtype DiffState r q = DiffState {unDiffState :: (r, Maybe q)}
 
-instance Add.Additive Token where
-  zero = Token '\0'
-  Token _ + Token c = Token c
+instance (Add.Additive r) => Add.Additive (DiffState r q) where
+  zero = DiffState (Add.zero, Nothing)
+  DiffState (w, q) + DiffState (w', q') = DiffState (w Add.+ w', q <|> q')
 
--- | A parser-syntax state forced into an 'Additive' shape.
---
--- 'DiffMealy' requires an additive state, but a parser syntax tree is not a
--- vector.  This wrapper is the minimal hack that lets the types line up:
--- 'zero' is the failing parser and 'plus' keeps the left-hand state.  A real
--- differentiable compiler needs either a change to the @mealy@ API or a
--- genuine semiring structure on parser states.
-newtype AdditiveSyntax f s a = AdditiveSyntax
-  {unAdditiveSyntax :: (ParserSyntax f s a, f)}
-
-instance (Uncons f s) => Add.Additive (AdditiveSyntax f s a) where
-  zero = AdditiveSyntax (empty, nil @f @s)
-  AdditiveSyntax (p, _) + _ = AdditiveSyntax (p, nil @f @s)
-
--- | Placeholder differentiable machine.
---
--- This demonstrates the API friction rather than solving it: the state is a
--- parser syntax tree wrapped in 'AdditiveSyntax', the output is @1@ when the
--- current derivative is nullable and @0@ otherwise, and all gradients are
--- zero.  Making this useful requires weights on grammar choices and a proper
--- pullback through the derivative coalgebra.
-compileDiffMealyStub ::
-  (Add.Additive p, Add.Additive b, Mul.Multiplicative b) =>
+-- | Total weight of nullable parses of a parser (ignoring result values).
+nullableWeight ::
+  (Add.Additive r, Mul.Multiplicative r) =>
   ParserSyntax String Char a ->
-  DiffMealy (AdditiveSyntax String Char a) (p, Token) b
-compileDiffMealyStub p0 =
+  r
+nullableWeight = maybe Add.zero (const Mul.one) . nullableValue
+
+-- | Compile a weighted parser syntax tree into a 'DiffMealy'.
+--
+-- The caller supplies a differentiable token-weight function
+-- @'Diff' (p, 'Token') r@.  The actual token is selected at runtime, but the
+-- gradient w.r.t. the parameter record @p@ is computed by reverse mode through
+-- the scan.
+compileDiffMealy ::
+  forall p r a.
+  (Add.Additive p, Add.Additive r, Mul.Multiplicative r) =>
+  (Char -> Diff (p, Token) r) ->
+  ParserSyntax String Char a ->
+  DiffMealy (DiffState r (ParserSyntax String Char a)) (p, Token) r
+compileDiffMealy weight p0 =
   DiffMealy
-    { dInject =
-        Diff' $
-          const
-            ( AdditiveSyntax (p0, nil @String @Char),
-              const (Add.zero, Token '\0')
-            ),
-      dStep =
-        Diff' $ \(AdditiveSyntax (p, rest), (_, Token c)) ->
-          let p' = derive c p
-              rest' = dropOne (Proxy @Char) rest
-           in ( AdditiveSyntax (p', rest'),
-                const (Add.zero, (Add.zero, Token '\0'))
-              ),
-      dExtract =
-        Diff' $ \(AdditiveSyntax (p, _)) ->
-          let y = maybe Add.zero (const Mul.one) (nullableValue p)
-           in (y, const Add.zero)
+    { dInject = injectDiff,
+      dStep = stepDiff,
+      dExtract = extractDiff
     }
+  where
+    injectDiff :: Diff (p, Token) (DiffState r (ParserSyntax String Char a))
+    injectDiff = Diff' $ \(param, Token c) ->
+      let q' = derive c p0
+          Diff' wDiff = weight c
+          (wToken, pw) = wDiff (param, Token c)
+       in ( DiffState (wToken, Just q'),
+            \dstate ->
+              let dw = fst (unDiffState dstate)
+                  (dparam, dToken) = pw dw
+               in (dparam, dToken)
+          )
+
+    stepDiff ::
+      Diff
+        (DiffState r (ParserSyntax String Char a), (p, Token))
+        (DiffState r (ParserSyntax String Char a))
+    stepDiff = Diff' $ \(DiffState (w, mq), (param, Token c)) ->
+      let q = fromMaybe empty mq
+          q'' = derive c q
+          Diff' wDiff = weight c
+          (wToken, pw) = wDiff (param, Token c)
+          w' = w Mul.* wToken
+       in ( DiffState (w', Just q''),
+            \dstate ->
+              let dw = fst (unDiffState dstate)
+                  dwToW = dw Mul.* wToken
+                  dwToToken = dw Mul.* w
+                  (dparam, dToken) = pw dwToToken
+               in (DiffState (dwToW, mq), (dparam, dToken))
+          )
+
+    extractDiff :: Diff (DiffState r (ParserSyntax String Char a)) r
+    extractDiff = Diff' $ \(DiffState (w, mq)) ->
+      let nw = maybe Add.zero nullableWeight mq
+          y = w Mul.* nw
+       in (y, \dy -> DiffState (dy Mul.* nw, mq))
+
+-- ---------------------------------------------------------------------------
+-- Demo: "ab" | "a" with per-token weights
+-- ---------------------------------------------------------------------------
+
+-- | Differentiable weight for the two-token alphabet used in
+-- 'Circuit.Parser.Unified.SemiringProbe.outsideDemo'.
+abWeight :: Char -> Diff (ABParam, Token) Double
+abWeight 'a' =
+  Diff' $ \(p, _) ->
+    ( abWa p,
+      \dw -> (ABParam dw 0, Token '\0')
+    )
+abWeight 'b' =
+  Diff' $ \(p, _) ->
+    ( abWb p,
+      \dw -> (ABParam 0 dw, Token '\0')
+    )
+abWeight _ = Diff' $ const (0, const (Add.zero, Token '\0'))
+
+-- | Weighted parser syntax for @"ab" | "a"@.
+abParserSyntax :: ParserSyntax String Char String
+abParserSyntax = stringS "ab" <|> stringS "a"
+
+-- | Differentiable recogniser for @"ab" | "a"@, compiled from syntax.
+abDiffMealyCompiled ::
+  DiffMealy
+    (DiffState Double (ParserSyntax String Char String))
+    (ABParam, Token)
+    Double
+abDiffMealyCompiled = compileDiffMealy abWeight abParserSyntax
+
+-- | Gradient bridge: the compiled 'DiffMealy' reproduces the outside values.
+--
+-- >>> mealyCompilerOutsideDemo
+-- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
+-- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
+mealyCompilerOutsideDemo :: IO ()
+mealyCompilerOutsideDemo = do
+  let p = ABParam 2 3
+  print (paramFold abDiffMealyCompiled p "ab")
+  print (paramFold abDiffMealyCompiled p "a")
