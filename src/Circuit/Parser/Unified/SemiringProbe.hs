@@ -91,6 +91,7 @@ import Data.Kind (Constraint, Type)
 import Data.List (elemIndex, sortOn)
 import Data.Maybe (fromMaybe)
 import Data.These (These (..), these)
+import Harpie.NumHask.Matrix (fromLists, starMatrix, toLists)
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
 import NumHask.Algebra.Ring qualified as Ring
@@ -477,72 +478,10 @@ sumR :: (Add.Additive r) => [r] -> r
 sumR = foldr (Add.+) Add.zero
 
 -- ---------------------------------------------------------------------------
--- Square matrix toolbox for Kleene star (block recursion)
+-- Square matrix toolbox for Kleene star
 -- ---------------------------------------------------------------------------
-
--- | Square matrix stored row-major.
-newtype Matrix r = Matrix {unMatrix :: [[r]]}
-  deriving (Eq, Show)
-
--- | Elementwise addition.
-matPlus :: (Add.Additive r) => Matrix r -> Matrix r -> Matrix r
-matPlus (Matrix a) (Matrix b) =
-  Matrix [zipWith (Add.+) rowA rowB | (rowA, rowB) <- zip a b]
-
--- | Matrix multiplication.
-matTimes ::
-  (Add.Additive r, Mul.Multiplicative r) =>
-  Matrix r ->
-  Matrix r ->
-  Matrix r
-matTimes (Matrix a) (Matrix b) =
-  Matrix [[sumR (zipWith (Mul.*) row col) | col <- transpose b] | row <- a]
-  where
-    transpose :: [[r]] -> [[r]]
-    transpose [] = []
-    transpose xss
-      | all null xss = []
-      | otherwise = [h | (h : _) <- xss] : transpose [t | (_ : t) <- xss]
-
--- | Partition a square matrix into four quadrants.
-partitionM :: Matrix r -> (Matrix r, Matrix r, Matrix r, Matrix r)
-partitionM (Matrix m) =
-  let n = length m
-      k = n `div` 2
-      top = take k m
-      bot = drop k m
-      a = Matrix [take k row | row <- top]
-      b = Matrix [drop k row | row <- top]
-      c = Matrix [take k row | row <- bot]
-      d = Matrix [drop k row | row <- bot]
-   in (a, b, c, d)
-
--- | Combine four quadrants into a single matrix.
-combineM :: Matrix r -> Matrix r -> Matrix r -> Matrix r -> Matrix r
-combineM (Matrix a) (Matrix b) (Matrix c) (Matrix d) =
-  Matrix
-    ( [rowA ++ rowB | (rowA, rowB) <- zip a b]
-        ++ [rowC ++ rowD | (rowC, rowD) <- zip c d]
-    )
-
--- | Kleene star of a square matrix by 2×2 block recursion.
-starMatrix :: (Ring.StarSemiring r) => Matrix r -> Matrix r
-starMatrix (Matrix []) = Matrix []
-starMatrix m =
-  case unMatrix m of
-    [[x]] -> Matrix [[Ring.star x]]
-    _ ->
-      let (a, b, c, d) = partitionM m
-          dStar = starMatrix d
-          f = matPlus a (matTimes b (matTimes dStar c))
-          fStar = starMatrix f
-          e = fStar
-          fBlock = matTimes fStar (matTimes b dStar)
-          g = matTimes dStar (matTimes c fStar)
-          h = matPlus dStar (matTimes dStar (matTimes c (matTimes fStar (matTimes b dStar))))
-       in combineM e fBlock g h
-
--- | Collect all feedback states reachable from an initial list of states.
+--
+-- The canonical matrix carrier lives in "Harpie.NumHask.Matrix".
 feedbackClosure ::
   (Eq a) =>
   (a -> [(a, r)]) ->
@@ -579,13 +518,13 @@ traceCyclic (SemiringKleisli f) = SemiringKleisli $ \b0 -> solve (Right b0)
           idx a = fromMaybe (error "traceCyclic: feedback state escaped closure") (elemIndex a leftStates)
           n = length leftStates
           adj =
-            Matrix
+            fromLists
               [ [ sumR [w | (Left a', w) <- f (Left ai), a' == aj]
                 | aj <- leftStates
                 ]
               | ai <- leftStates
               ]
-          closure = unMatrix (starMatrix adj)
+          closure = toLists (starMatrix adj)
           leftOuts j =
             [ (outC, w)
             | (Right outC, w) <- f (Left (leftStates !! j))
