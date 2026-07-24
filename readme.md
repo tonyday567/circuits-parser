@@ -109,11 +109,12 @@ runParserError :: (Uncons f s) => Parser f s a -> f -> a
 | layer | modules | role |
 |-------|---------|------|
 | **core** | `Circuit.Parser`, `.Lexer`, `.Token`, `.Primitives` | stream coalgebra + combinators + fast lexers |
-| **specialty** | `Circuit.Markup*` | HTML/XML-ish tokenize → gather → render |
+| **specialty** | `Data.Markup*` (chart-svg) | HTML/XML-ish tokenize → gather → render |
 | **examples** | `examples/deck.md` | domain dialects (card/deck marks) — not library API |
 
-External consumers (huihua, chart-svg-dev, …) depend on **core** (and markup
-when needed). They own their dialects; this package does not ship them.
+External consumers (huihua, chart-svg-dev, …) depend on **core** (and
+`Data.Markup` from chart-svg when needed). They own their dialects; this
+package does not ship them.
 
 ### core
 
@@ -125,7 +126,8 @@ when needed). They own their dialects; this package does not ship them.
 
 ### specialty
 
-`Circuit.Markup` — HTML/XML-ish markup pipeline on the combinators above.
+`Data.Markup` (chart-svg) — HTML/XML-ish markup pipeline on the combinators
+above. Formerly `Circuit.Markup` in this package.
 
 ### examples
 

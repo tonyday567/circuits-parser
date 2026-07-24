@@ -24,15 +24,15 @@
 -- With these two additions, '<*>' and '<|>' become structural over generic
 -- categorical nodes.  '>>=' remains parser-specific (it is a dependent
 -- composition: the right-hand parser is chosen by a runtime value), so it is
--- admitted as a 'SigBind' node, just as "Circuit.Parser.Unified.Syntax" admits
+-- admitted as a 'SigBind' node, just as "Circuit.Parser.Syntax" admits
 -- 'CombBind'.
 --
 -- The result type is @Either f (a, f)@: 'Left' for failure with the original
 -- stream, 'Right' for success with value and leftover stream.
 --
--- === Comparison with "Circuit.Parser.Unified.Syntax"
+-- === Comparison with "Circuit.Parser.Syntax"
 --
--- "Circuit.Parser.Unified.Syntax" keeps parser-specific structure explicit in
+-- "Circuit.Parser.Syntax" keeps parser-specific structure explicit in
 -- a small set of opaque combinators ('CombAp', 'CombBind', 'CombAlt',
 -- 'CombMany', 'CombTry').  That design is pragmatic: static analysis such as
 -- 'firstSet', 'unreachableBranches' and 'toRegex' can pattern-match directly
@@ -48,7 +48,7 @@
 -- those two additions '<*>' and '<|>' are built from generic nodes; only
 -- '>>=' remains parser-specific ('SigBind').
 --
--- The obstruction that 'CombAp' solves in "Circuit.Parser.Unified.Syntax" is
+-- The obstruction that 'CombAp' solves in "Circuit.Parser.Syntax" is
 -- the same one that 'SigEitherFunctor' solves here.  In @Loop Either (Kleisli
 -- m)@ a parser is a morphism @f -> Either f (a, f)@.  The category gives us
 -- sequential composition and the trace gives us backtracking choice, but it
@@ -74,7 +74,7 @@
 -- split into 'SigCopyDiscard' / 'SigMergeZero' means this module now carries
 -- only the 'Dg.CopyDiscard' instance for @Kleisli Identity@; the degenerate
 -- 'MergeZero' orphan is gone.
-module Circuit.Parser.Unified.Net
+module Circuit.Parser.Net
   ( -- * Extra signatures
     SigEitherFunctor (..),
     SigEitherCase (..),
@@ -118,11 +118,11 @@ import Circuit.Algebra
 import Circuit.Category (Category (..), (.>))
 import Circuit.Channel (Traced, strengthD)
 import Circuit.Dagger qualified as Dg
-import Circuit.Parser.Unified
+import Circuit.Parser
   ( Parser (..),
     Uncons (..),
   )
-import Circuit.Parser.Unified qualified as PU
+import Circuit.Parser qualified as PU
 import Circuit.Tensor ()
 import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Arrow (Kleisli (..))
@@ -137,7 +137,7 @@ import Prelude hiding (id, (.))
 -- >>> import Data.Functor.Identity (Identity)
 -- >>> import Data.These (These (..))
 -- >>> import Control.Applicative ((<|>))
--- >>> import Circuit.Parser.Unified.Net (charN, stringN, manyN, runParserNetIdentity)
+-- >>> import Circuit.Parser.Net (charN, stringN, manyN, runParserNetIdentity)
 
 -- ---------------------------------------------------------------------------
 -- Signatures missing from AlgNet Either

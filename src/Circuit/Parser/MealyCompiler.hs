@@ -5,7 +5,7 @@
 
 -- | Coalgebraic compiler: parser syntax trees become Mealy state machines.
 --
--- A parser in 'Circuit.Parser.Unified.Syntax' is already a relation.  This
+-- A parser in 'Circuit.Parser.Syntax' is already a relation.  This
 -- module turns that relation into a coalgebra by Brzozowski derivation:
 --
 -- * machine state = a parser syntax tree;
@@ -27,7 +27,7 @@
 -- === doctests
 --
 -- >>> import Data.Mealy (scan, fold)
--- >>> import Circuit.Parser.Unified.Syntax (charS, stringS, manyS)
+-- >>> import Circuit.Parser.Syntax (charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 --
 -- >>> scan (compileMealy (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
@@ -42,7 +42,7 @@
 -- >>> mealyCompilerOutsideDemo
 -- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
 -- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
-module Circuit.Parser.Unified.MealyCompiler
+module Circuit.Parser.MealyCompiler
   ( -- * Plain Mealy compiler
     compileMealy,
     compileMealyWithInput,
@@ -56,9 +56,9 @@ module Circuit.Parser.Unified.MealyCompiler
   )
 where
 
-import Circuit.Parser.Unified (Uncons (..))
-import Circuit.Parser.Unified.MealyProbe (ABParam (..), Token (..), paramFold)
-import Circuit.Parser.Unified.Syntax
+import Circuit.Parser (Uncons (..))
+import Circuit.Parser.MealyProbe (ABParam (..), Token (..), paramFold)
+import Circuit.Parser.Syntax
   ( ParserSyntax (..),
     derive,
     nullableValue,
@@ -77,7 +77,7 @@ import Prelude
 
 -- $setup
 -- >>> import Data.Mealy (scan, fold)
--- >>> import Circuit.Parser.Unified.Syntax (ParserSyntax, charS, stringS, manyS)
+-- >>> import Circuit.Parser.Syntax (ParserSyntax, charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 
 -- | Drop one element from a stream, returning the empty stream if the element
@@ -215,7 +215,7 @@ compileDiffMealy weight p0 =
 -- ---------------------------------------------------------------------------
 
 -- | Differentiable weight for the two-token alphabet used in
--- 'Circuit.Parser.Unified.SemiringProbe.outsideDemo'.
+-- 'Circuit.Parser.SemiringProbe.outsideDemo'.
 abWeight :: Char -> Diff (ABParam, Token) Double
 abWeight 'a' =
   Diff' $ \(p, _) ->

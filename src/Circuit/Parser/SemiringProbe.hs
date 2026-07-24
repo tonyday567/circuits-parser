@@ -20,7 +20,7 @@
 -- 'StarSemiring'.  Carrier-dependent normalization mirrors
 -- 'NumHask.Free.StarSemiring.kleeneSimplify': idempotent carriers (Kleene
 -- algebras) merge duplicate outputs, counting carriers keep them.
-module Circuit.Parser.Unified.SemiringProbe
+module Circuit.Parser.SemiringProbe
   ( -- * Carriers and source monad
     Count (..),
     Dual2 (..),
@@ -76,8 +76,8 @@ where
 import Circuit qualified as C
 import Circuit.Category (Category (..), ObDict (..), (.>))
 import Circuit.Channel (Channel (..), Strength (..), Traced (..))
-import Circuit.Parser.Unified (Uncons (..))
-import Circuit.Parser.Unified.Semiring
+import Circuit.Parser (Uncons (..))
+import Circuit.Parser.Semiring
   ( Count (..),
     Dual2 (..),
     MinPlus (..),

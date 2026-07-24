@@ -2,7 +2,7 @@
 
 module Main where
 
-import Circuit.Parser.Unified qualified as CPU
+import Circuit.Parser qualified as CPU
 import Control.Applicative (many, (<|>))
 import Control.Monad.Except (ExceptT, runExceptT)
 import Data.Attoparsec.ByteString.Char8 qualified as A

@@ -20,6 +20,7 @@ where
 import Circuit.Parser
 import Data.ByteString (ByteString)
 import Data.Char (isAsciiLower, isAsciiUpper, ord)
+import Data.Functor.Identity (Identity)
 import Data.Text qualified as T
 import Data.Text.Encoding
 import Data.Text.Encoding.Error
@@ -33,16 +34,17 @@ isLatinLetter :: Char -> Bool
 isLatinLetter c = isAsciiLower c || isAsciiUpper c
 
 -- | Parse a single digit.
-digit :: Parser ByteString Char Int
+digit :: Parser Identity ByteString Char Int
 digit = (\c -> ord c - ord '0') <$> satisfy isDigit
 
 -- | Parse one or more digits, returning @(place, value)@ where @place@ is
 -- @10 ^ number_of_digits@.
 --
--- >>> import Circuit.Parser (runParser)
--- >>> runParser digits "123"
+-- >>> import Circuit.Parser (runParserIdentity)
+-- >>> import Data.ByteString.Char8 qualified as B
+-- >>> runParserIdentity digits (B.pack "123")
 -- These (1000,123) ""
-digits :: Parser ByteString Char (Int, Int)
+digits :: Parser Identity ByteString Char (Int, Int)
 digits = do
   ds <- some digit
   let place = 10 ^ length ds
@@ -50,13 +52,13 @@ digits = do
   return (place, n)
 
 -- | Parse a non-empty sequence of digits as an integer.
-int :: Parser ByteString Char Int
+int :: Parser Identity ByteString Char Int
 int = do
   (place, n) <- digits
   if place == 1 then empty else return n
 
 -- | Parse a floating-point number.
-double :: Parser ByteString Char Double
+double :: Parser Identity ByteString Char Double
 double = do
   (placel, nl) <- digits
   mfrac <- optional (char '.' *> digits)
@@ -67,7 +69,7 @@ double = do
       return (fromIntegral nl + fromIntegral nr / fromIntegral placer)
 
 -- | Optionally negate the result of a parser.
-signed :: (Num a) => Parser ByteString Char a -> Parser ByteString Char a
+signed :: (Num a) => Parser Identity ByteString Char a -> Parser Identity ByteString Char a
 signed p = do
   m <- optional (char '-')
   case m of

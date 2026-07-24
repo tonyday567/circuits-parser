@@ -25,7 +25,7 @@
 -- committing to the first successful branch: some feedbacks do not admit the
 -- obvious trace.  The replacements are 'DiffMealy''s reverse step and
 -- 'SemiringProbe.traceCyclic''s Kleene closure respectively.
-module Circuit.Parser.Unified.MealyProbe
+module Circuit.Parser.MealyProbe
   ( -- * Token wrapper for non-differentiable inputs
     Token (..),
 
@@ -195,7 +195,7 @@ paramScan m p cs =
 --
 -- On input @"ab"@ with weights @wa = 2@, @wb = 3@ the inside value is @6@ and
 -- the gradient is @(3, 2)@ — exactly the first line of
--- 'Circuit.Parser.Unified.SemiringProbe.outsideDemo'.  On input @"a"@ the
+-- 'Circuit.Parser.SemiringProbe.outsideDemo'.  On input @"a"@ the
 -- value is @2@ and the gradient is @(1, 0)@.
 --
 -- >>> mealyOutsideDemo

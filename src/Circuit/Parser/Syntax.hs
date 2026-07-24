@@ -11,7 +11,7 @@
 
 -- | Reifiable parser syntax.
 --
--- The parser type in "Circuit.Parser.Unified" hides primitive operations inside
+-- The parser type in "Circuit.Parser" hides primitive operations inside
 -- @Kleisli m@ closures. This module exposes those primitives as constructors in
 -- a syntax tree, so the same parser can be executed /and/ analyzed.
 --
@@ -26,7 +26,7 @@
 -- >>> import Data.Functor.Identity (Identity)
 -- >>> import Data.These (These(..))
 -- >>> import Control.Applicative ((<|>))
--- >>> import Circuit.Parser.Unified.Syntax (charS, stringS, manyS, firstSet, toRegex)
+-- >>> import Circuit.Parser.Syntax (charS, stringS, manyS, firstSet, toRegex)
 --
 -- >>> runParserSyntaxIdentity (charS 'a') "abc"
 -- These 'a' "bc"
@@ -45,7 +45,7 @@
 --
 -- >>> toRegex (manyS (charS 'a') :: ParserSyntax String Char String)
 -- Just REStar (REChar 'a')
-module Circuit.Parser.Unified.Syntax
+module Circuit.Parser.Syntax
   ( -- * Signatures
     SigPrim (..),
     SigComb (..),
@@ -103,11 +103,11 @@ import Circuit.Algebra
   )
 import Circuit.Category (Category (..), (.>))
 import Circuit.Channel (Traced)
-import Circuit.Parser.Unified
+import Circuit.Parser
   ( Parser (..),
     Uncons (..),
   )
-import Circuit.Parser.Unified qualified as PU
+import Circuit.Parser qualified as PU
 import Control.Applicative (Alternative (empty, (<|>)), optional)
 import Control.Arrow (Kleisli (..))
 import Control.Monad (MonadPlus, void)
@@ -122,7 +122,7 @@ import Prelude hiding (id, (.))
 -- >>> import Data.Functor.Identity (Identity)
 -- >>> import Data.These (These (..))
 -- >>> import Control.Applicative ((<|>))
--- >>> import Circuit.Parser.Unified.Syntax (charS, stringS, manyS, firstSet, toRegex)
+-- >>> import Circuit.Parser.Syntax (charS, stringS, manyS, firstSet, toRegex)
 
 -- ---------------------------------------------------------------------------
 -- Signatures

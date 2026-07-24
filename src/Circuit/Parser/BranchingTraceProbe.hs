@@ -9,7 +9,7 @@
 -- the first 'Right' result produced by the loop body and discards any
 -- alternatives.  This is exactly why running a parser with 'LogicT' still
 -- returns a singleton list when choices are expressed through the trace
--- (see "Circuit.Parser.Unified").
+-- (see "Circuit.Parser").
 --
 -- This module defines a small wrapper monad 'BranchingM' and a 'Traced'
 -- instance that enumerates /all/ reachable 'Right' exits instead of stopping
@@ -27,7 +27,7 @@
 -- obvious recursive definition leaks a failure branch because the existing
 -- '<*>' reports the /original/ input on component failure.  Designing a
 -- total branching repetition combinator is the next step after this probe.
-module Circuit.Parser.Unified.BranchingTraceProbe
+module Circuit.Parser.BranchingTraceProbe
   ( BranchingM (..),
     runBranching,
     altB,
@@ -38,7 +38,7 @@ where
 
 import Circuit qualified as C
 import Circuit.Channel (Traced (..))
-import Circuit.Parser.Unified
+import Circuit.Parser
   ( Parser (..),
     Uncons,
     runParser,

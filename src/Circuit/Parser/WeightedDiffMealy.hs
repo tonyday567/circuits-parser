@@ -1,19 +1,19 @@
 {-# LANGUAGE GADTs #-}
 
 -- | A small regular/applicative parser syntax used as a lightweight front-end
--- to the 'Circuit.Parser.Unified.MealyCompiler' backend.
+-- to the 'Circuit.Parser.MealyCompiler' backend.
 --
 -- 'WParser' is exactly the regular fragment of 'ParserSyntax' rebuilt without
 -- the full fixed-point machinery.  It exists for demos and teaching; the
--- compiler itself lives in "Circuit.Parser.Unified.MealyCompiler".
+-- compiler itself lives in "Circuit.Parser.MealyCompiler".
 --
 -- === doctests
 --
--- >>> import Circuit.Parser.Unified.WeightedDiffMealy (diffMealyOutsideDemo)
+-- >>> import Circuit.Parser.WeightedDiffMealy (diffMealyOutsideDemo)
 -- >>> diffMealyOutsideDemo
 -- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
 -- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
-module Circuit.Parser.Unified.WeightedDiffMealy
+module Circuit.Parser.WeightedDiffMealy
   ( -- * Weighted parser syntax
     WParser (..),
     wstring,
@@ -28,9 +28,9 @@ module Circuit.Parser.Unified.WeightedDiffMealy
   )
 where
 
-import Circuit.Parser.Unified.MealyCompiler qualified as MC
-import Circuit.Parser.Unified.MealyProbe (ABParam (..), Token (..), paramFold)
-import Circuit.Parser.Unified.Syntax
+import Circuit.Parser.MealyCompiler qualified as MC
+import Circuit.Parser.MealyProbe (ABParam (..), Token (..), paramFold)
+import Circuit.Parser.Syntax
   ( ParserSyntax,
     anyTokenS,
     charS,
@@ -45,7 +45,7 @@ import NumHask.Diff (Diff, Diff' (..))
 import Prelude
 
 -- $setup
--- >>> import Circuit.Parser.Unified.WeightedDiffMealy (diffMealyOutsideDemo)
+-- >>> import Circuit.Parser.WeightedDiffMealy (diffMealyOutsideDemo)
 
 -- ---------------------------------------------------------------------------
 -- Weighted parser syntax
@@ -81,7 +81,7 @@ toParserSyntax (WAlt p1 p2) = toParserSyntax p1 <|> toParserSyntax p2
 toParserSyntax (WFmap g p) = g <$> toParserSyntax p
 
 -- | Compile a weighted 'WParser' into a 'DiffMealy' via the shared
--- 'Circuit.Parser.Unified.MealyCompiler' backend.
+-- 'Circuit.Parser.MealyCompiler' backend.
 compileDiffMealy ::
   (Add.Additive p, Add.Additive r, Mul.Multiplicative r) =>
   (Char -> Diff (p, Token) r) ->
@@ -94,7 +94,7 @@ compileDiffMealy weight = MC.compileDiffMealy weight . toParserSyntax
 -- ---------------------------------------------------------------------------
 
 -- | Differentiable weight for the two-token alphabet used in
--- 'Circuit.Parser.Unified.SemiringProbe.outsideDemo'.
+-- 'Circuit.Parser.SemiringProbe.outsideDemo'.
 abWeight :: Char -> Diff (ABParam, Token) Double
 abWeight 'a' =
   Diff' $ \(p, _) ->

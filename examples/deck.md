@@ -7,7 +7,8 @@ tags: ['parser', 'deck', 'cards', 'experimental']
 
 > **Example only — not library API.** This dialect used to live as
 > `Circuit.Deck`. The package surface is now **one core**
-> (`Circuit.Parser*`) and **one specialty** (`Circuit.Markup*`).
+> (`Circuit.Parser*`). The former `Circuit.Markup*` specialty now lives in
+> chart-svg as `Data.Markup*`.
 > Deck belongs here as a worked consumer, same idea as other
 > `~/haskell/*` sites (e.g. huihua) that depend on the core without
 > shipping domain syntax from this package.
@@ -238,8 +239,9 @@ consuming a lead.
 | import | status |
 |--------|--------|
 | `Circuit.Parser` (+ Lexer, Token, Primitives) | **core** — stream coalgebra + combinators |
-| `Circuit.Markup` | **specialty** — HTML/XML-ish pipeline |
+| `Data.Markup` (chart-svg) | **specialty** — HTML/XML-ish pipeline |
 | this card | **example** — card/deck dialect; promote in a consumer if needed |
 
 External consumers (huihua, chart-svg-dev, …) should depend on **core**
-(and markup if needed), not on a deck module from this package.
+(and `Data.Markup` from chart-svg if needed), not on a deck module from this
+package.

@@ -8,7 +8,7 @@
 -- 'NumHask.Algebra.Additive' / 'Multiplicative'.  This module supplies the
 -- carriers that do not already have a home in 'NumHask.Free.Carriers' and
 -- re-exports the off-the-shelf carriers we need.
-module Circuit.Parser.Unified.Semiring
+module Circuit.Parser.Semiring
   ( -- * numhask semiring vocabulary (re-exported for convenience)
     NHR.StarSemiring,
     NHR.KleeneAlgebra,

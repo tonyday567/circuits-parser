@@ -17,22 +17,22 @@
 -- cheap to construct, and the level-wise merge is the "zip" on the encoded
 -- list implemented with the monadic hyperfunction @HypM@.
 --
--- The standard 'Circuit.Parser.Unified.<|>' still commits on the first success,
+-- The standard 'Circuit.Parser.<|>' still commits on the first success,
 -- because it does not emit a failure-feedback edge after a success.  Use
 -- 'altLevels' for a choice operator that runs both branches and interleaves
 -- their results fairly.
 --
 -- === doctests
 --
--- >>> import Circuit.Parser.Unified
--- >>> import Circuit.Parser.Unified.LevelsT
+-- >>> import Circuit.Parser
+-- >>> import Circuit.Parser.LevelsT
 -- >>> import Data.Functor.Identity (Identity, runIdentity)
 -- >>> import Data.These (These (..))
 --
 -- >>> let p = string "ab" `altLevels` string "a" :: Parser (LevelsT Identity) String Char String
 -- >>> runIdentity $ runParserLevelsT p "ab"
 -- [These "ab" "",These "a" "b"]
-module Circuit.Parser.Unified.LevelsT
+module Circuit.Parser.LevelsT
   ( -- * Levels transformer
     LevelsT (..),
     Bag,
@@ -46,7 +46,7 @@ where
 
 import Circuit qualified as C
 import Circuit.Channel (Traced (..))
-import Circuit.Parser.Unified
+import Circuit.Parser
   ( Parser (..),
     Uncons,
     runParser,

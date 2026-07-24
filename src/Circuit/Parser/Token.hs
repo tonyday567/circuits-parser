@@ -24,8 +24,9 @@ module Circuit.Parser.Token
   )
 where
 
-import Circuit.Parser (Parser, These (..), Uncons (..), char, runParser, satisfy, some, (<|>))
+import Circuit.Parser (Parser, These (..), Uncons (..), char, runParserIdentity, satisfy, some, (<|>))
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
+import Data.Functor.Identity (Identity)
 import Data.Foldable (toList)
 import Data.IntMap.Strict qualified as IntMap
 import Data.Map.Strict qualified as Map
@@ -38,28 +39,28 @@ import Harpie.Array qualified as A
 -- Token Patterns
 -- ============================================================================
 
-lowerLetter :: (Uncons f Char) => Parser f Char Char
+lowerLetter :: (Uncons f Char) => Parser Identity f Char Char
 lowerLetter = satisfy isAsciiLower
 
-upperLetter :: (Uncons f Char) => Parser f Char Char
+upperLetter :: (Uncons f Char) => Parser Identity f Char Char
 upperLetter = satisfy isAsciiUpper
 
-letter :: (Uncons f Char) => Parser f Char Char
+letter :: (Uncons f Char) => Parser Identity f Char Char
 letter = lowerLetter <|> upperLetter
 
-digit :: (Uncons f Char) => Parser f Char Char
+digit :: (Uncons f Char) => Parser Identity f Char Char
 digit = satisfy isDigit
 
-word :: (Uncons f Char) => Parser f Char [Char]
+word :: (Uncons f Char) => Parser Identity f Char [Char]
 word = some letter
 
-number :: (Uncons f Char) => Parser f Char [Char]
+number :: (Uncons f Char) => Parser Identity f Char [Char]
 number = some digit
 
-punctuation :: (Uncons f Char) => Parser f Char Char
+punctuation :: (Uncons f Char) => Parser Identity f Char Char
 punctuation = foldr1 (<|>) (map char ",.;:!?'\"-()[]{}@#$%&*+=<>/\\\\|~`")
 
-token :: (Uncons f Char) => Parser f Char [Char]
+token :: (Uncons f Char) => Parser Identity f Char [Char]
 token = word <|> number <|> fmap (: []) punctuation
 
 -- ============================================================================
@@ -79,7 +80,7 @@ tokenize input =
 tokenizeLoop :: String -> [String] -> [String]
 tokenizeLoop [] acc = reverse acc
 tokenizeLoop s acc =
-  case runParser token s of
+  case runParserIdentity token s of
     These tok rest ->
       if null tok
         then tokenizeLoop rest acc

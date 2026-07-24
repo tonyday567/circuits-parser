@@ -3,7 +3,7 @@
 
 -- | Example instantiations of the unified parser over different base monads.
 --
--- The primitives in "Circuit.Parser.Unified" are polymorphic in the base monad
+-- The primitives in "Circuit.Parser" are polymorphic in the base monad
 -- @m@. This module shows how to run the same parser syntax under three
 -- different interpretations:
 --
@@ -15,7 +15,7 @@
 -- the 'Loop Either' control structure still commits to the first successful
 -- branch. Enumerating /all/ parse trees of the same input requires a different
 -- target interpretation of the free 'Loop' (see the unification card).
-module Circuit.Parser.Unified.Examples
+module Circuit.Parser.Examples
   ( -- * Runners
     runMega,
     runLogic,
@@ -26,7 +26,7 @@ module Circuit.Parser.Unified.Examples
 where
 
 import Circuit.Channel (Traced)
-import Circuit.Parser.Unified
+import Circuit.Parser
 import Control.Arrow (Kleisli (..))
 import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.Logic (LogicT, observeAllT)
