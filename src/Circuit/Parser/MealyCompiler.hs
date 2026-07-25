@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
--- | Coalgebraic compiler: parser syntax trees become Mealy state machines.
+-- | Coalgebraic compiler: parser syntax trees become Process state machines.
 --
 -- A parser in 'Circuit.Parser.Syntax' is already a relation.  This
 -- module turns that relation into a coalgebra by Brzozowski derivation:
@@ -26,7 +26,7 @@
 --
 -- === doctests
 --
--- >>> import Data.Mealy (scan, fold)
+-- >>> import Process.Stats (scan, fold)
 -- >>> import Circuit.Parser.Syntax (charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 --
@@ -43,7 +43,7 @@
 -- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
 -- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
 module Circuit.Parser.MealyCompiler
-  ( -- * Plain Mealy compiler
+  ( -- * Plain Process compiler
     compileMealy,
     compileMealyWithInput,
 
@@ -66,8 +66,8 @@ import Circuit.Parser.Syntax
   )
 import Control.Applicative (Alternative (empty), (<|>))
 import Data.Maybe (fromMaybe)
-import Data.Mealy (Mealy (..))
-import Data.Mealy.Diff (DiffMealy (..))
+import Process.Stats (Process (..))
+import Process.Stats.Diff (DiffMealy (..))
 import Data.Proxy (Proxy (..))
 import Data.These (These (..))
 import NumHask.Algebra.Additive qualified as Add
@@ -76,7 +76,7 @@ import NumHask.Diff (Diff, Diff' (..))
 import Prelude
 
 -- $setup
--- >>> import Data.Mealy (scan, fold)
+-- >>> import Process.Stats (scan, fold)
 -- >>> import Circuit.Parser.Syntax (ParserSyntax, charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 
@@ -89,10 +89,10 @@ dropOne _ xs = case uncons @f @s xs of
   That _ -> xs
 
 -- ---------------------------------------------------------------------------
--- Plain Mealy compiler
+-- Plain Process compiler
 -- ---------------------------------------------------------------------------
 
--- | Compile a parser into a Mealy machine whose output is the parse result of
+-- | Compile a parser into a Process machine whose output is the parse result of
 -- the prefix consumed so far.
 --
 -- The machine state is the Brzozowski derivative of the original parser after
@@ -104,20 +104,20 @@ dropOne _ xs = case uncons @f @s xs of
 compileMealy ::
   (Eq s, Uncons f s) =>
   ParserSyntax f s a ->
-  Mealy s (Maybe a)
-compileMealy p0 = Mealy inject step extract
+  Process s (Maybe a)
+compileMealy p0 = Process inject step extract
   where
     inject c = derive c p0
     step p c = derive c p
     extract = nullableValue
 
--- | Compile a parser into a Mealy machine tied to a known input stream.
+-- | Compile a parser into a Process machine tied to a known input stream.
 --
 -- The state carries the current derivative /and/ the remaining suffix of the
 -- input.  This lets extraction return both a parse result and the leftover
 -- stream, matching the usual parser output shape.
 --
--- Because a 'Mealy' has no explicit initial state, the input stream is
+-- Because a 'Process' has no explicit initial state, the input stream is
 -- captured at compile time and threaded through 'inject' and 'step'.
 --
 -- >>> scan (compileMealyWithInput "ab" (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
@@ -127,8 +127,8 @@ compileMealyWithInput ::
   (Eq s, Uncons f s) =>
   f ->
   ParserSyntax f s a ->
-  Mealy s (Maybe (a, f))
-compileMealyWithInput input p0 = Mealy inject step extract
+  Process s (Maybe (a, f))
+compileMealyWithInput input p0 = Process inject step extract
   where
     inject c = (derive c p0, dropOne (Proxy @s) input)
     step (p, rest) c = (derive c p, dropOne (Proxy @s) rest)

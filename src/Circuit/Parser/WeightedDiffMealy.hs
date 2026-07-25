@@ -38,7 +38,7 @@ import Circuit.Parser.Syntax
     stringS,
   )
 import Control.Applicative (Alternative (empty), (<|>))
-import Data.Mealy.Diff (DiffMealy (..))
+import Process.Stats.Diff (DiffMealy (..))
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
 import NumHask.Diff (Diff, Diff' (..))

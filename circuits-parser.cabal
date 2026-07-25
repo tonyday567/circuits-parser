@@ -44,7 +44,7 @@ library
     harpie >=0.2 && <0.4,
     harpie-numhask >=0.2 && <0.3,
     logict >=0.8 && <0.9,
-    mealy >=0.5 && <0.6,
+    process-stats >=0.1 && <0.2,
     mtl >=2.3 && <2.4,
     numhask >=0.14 && <0.15,
     numhask-diff >=0.1 && <0.2,

@@ -574,7 +574,7 @@ toRegex = go . unParserSyntax
 
 -- | The parser that remains after consuming one token.
 --
--- This is the core of the coalgebraic compiler: a 'Mealy' machine state is a
+-- This is the core of the coalgebraic compiler: a 'Process' machine state is a
 -- parser syntax tree, and consuming a token transitions to its derivative.
 -- The implementation covers the applicative + alternative + 'many' fragment;
 -- 'CombBind' is rejected because it is dependent composition.

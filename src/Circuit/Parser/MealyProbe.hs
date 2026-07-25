@@ -1,14 +1,14 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
--- | Mealy-machine bridge: parsing as a coalgebraic state machine.
+-- | Process-machine bridge: parsing as a coalgebraic state machine.
 --
 -- The semiring spike resolved the branching-trace gate algebraically, by
 -- summing over all paths through a cyclic choice graph ('SemiringProbe').  The
 -- @mealy@ package contains the same phenomenon from the coalgebra side:
 --
--- * 'Data.Mealy.Trace' gives a lazy @Traced (,) Mealy@ instance.
--- * 'Data.Mealy.Diff' gives reverse-mode AD through a Mealy scan via
+-- * 'Process.Stats.Trace' gives a lazy @Traced (,) Process@ instance.
+-- * 'Process.Stats.Diff' gives reverse-mode AD through a Process scan via
 --   'DiffMealy'.
 --
 -- This probe shows that a tiny parser can be written as a state machine, and
@@ -19,7 +19,7 @@
 --
 -- === Trace-divergence correspondence
 --
--- 'Data.Mealy.Trace' diverges for strict numeric accumulators (moving
+-- 'Process.Stats.Trace' diverges for strict numeric accumulators (moving
 -- average) because the per-step fixed point @a_t = r * a_t + x_t@ has no lazy
 -- solution.  That is the same obstruction as the naive @Traced Either@ parser
 -- committing to the first successful branch: some feedbacks do not admit the
@@ -29,7 +29,7 @@ module Circuit.Parser.MealyProbe
   ( -- * Token wrapper for non-differentiable inputs
     Token (..),
 
-    -- * Plain Mealy recognizer
+    -- * Plain Process recognizer
     abMealy,
 
     -- * Weighted DiffMealy recognizer and gradient bridge
@@ -49,15 +49,15 @@ module Circuit.Parser.MealyProbe
   )
 where
 
-import Data.Mealy (Mealy (..))
-import Data.Mealy.Diff (DiffMealy (..), diffFold, diffScan)
+import Process.Stats (Process (..))
+import Process.Stats.Diff (DiffMealy (..), diffFold, diffScan)
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
 import NumHask.Diff (Diff' (..))
 import Prelude
 
 -- $setup
--- >>> import Data.Mealy (fold, scan)
+-- >>> import Process.Stats (fold, scan)
 
 -- ---------------------------------------------------------------------------
 -- Non-differentiable input tokens
@@ -75,7 +75,7 @@ instance Add.Additive Token where
   Token _ + Token c = Token c
 
 -- ---------------------------------------------------------------------------
--- Plain Mealy recognizer for "ab" | "a"
+-- Plain Process recognizer for "ab" | "a"
 -- ---------------------------------------------------------------------------
 
 -- | Finite-state recognizer for the language @"ab" | "a"@.
@@ -88,8 +88,8 @@ instance Add.Additive Token where
 --
 -- >>> fold abMealy "aab"
 -- Nothing
-abMealy :: Mealy Char (Maybe String)
-abMealy = Mealy inject step id
+abMealy :: Process Char (Maybe String)
+abMealy = Process inject step id
   where
     inject 'a' = Just "a"
     inject _ = Nothing
@@ -191,7 +191,7 @@ paramScan m p cs =
       grads = pb (replicate (length ys) Mul.one)
    in (ys, foldl' (Add.+) Add.zero (map fst grads))
 
--- | Gradient bridge: Mealy gradients for the @"ab" | "a"@ parser.
+-- | Gradient bridge: Process gradients for the @"ab" | "a"@ parser.
 --
 -- On input @"ab"@ with weights @wa = 2@, @wb = 3@ the inside value is @6@ and
 -- the gradient is @(3, 2)@ — exactly the first line of
