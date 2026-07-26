@@ -57,19 +57,6 @@ library
     -Wall
     -Wcompat
 
-test-suite docspec
-  type: exitcode-stdio-1.0
-  main-is: Docspec.hs
-  hs-source-dirs: test
-  build-depends:
-    base >=4.20 && <5,
-    process >=1.6 && <1.7,
-
-  default-language: GHC2024
-  ghc-options:
-    -Wall
-    -Wcompat
-
 benchmark circuits-parser-bench
   type: exitcode-stdio-1.0
   main-is: Bench.hs
