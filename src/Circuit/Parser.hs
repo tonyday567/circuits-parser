@@ -112,6 +112,7 @@ where
 import Circuit (Loop (..), run, trace)
 import Circuit.Category (Category (..), (.>))
 import Circuit.Channel (Traced)
+import Circuit.Stream (These (..), Uncons (..))
 import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Arrow (Kleisli (..))
 import Control.Monad (MonadPlus, void)
@@ -120,26 +121,14 @@ import Data.Bool (bool)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
 import Data.Char (isAscii)
-import Data.Functor ( ($>) )
+import Data.Functor (($>))
 import Data.Functor.Identity (Identity (..))
-import Data.Text (Text)
-import Data.Text qualified as T
-import Data.These (These (..), these)
-import Data.Word (Word8)
+import Data.These (these)
 import Prelude hiding (id, (.))
 
 -- $setup
 -- >>> import Data.Functor.Identity (Identity)
 -- >>> import Data.These (These (..))
-
--- | Stream coalgebra with explicit boundary.
---
--- @uncons [x] = This x@ announces the final element at extraction. The
--- 'nil' value is the stream-specific empty used to continue parsing after
--- a 'This' result.
-class Uncons f s where
-  uncons :: f -> These s f
-  nil :: f
 
 -- | Parser syntax: a @Loop Either@ morphism in @Kleisli m@ from stream @f@ to
 -- result @These a f@.
@@ -236,9 +225,10 @@ instance (Monad m, Uncons f s) => Applicative (Parser m f s) where
   pure a = Parser $ Lift $ Kleisli $ \f -> pure (These a f)
 
   Parser pf <*> Parser pa = Parser $ Lift $ Kleisli $ \s -> do
-    let app g s' = runKleisli (run pa) s' >>= \case
-          That _ -> pure (That s)
-          res -> pure (first g res)
+    let app g s' =
+          runKleisli (run pa) s' >>= \case
+            That _ -> pure (That s)
+            res -> pure (first g res)
     runKleisli (run pf) s >>= \case
       That _ -> pure (That s)
       This g -> app g (nil @f @s)
@@ -349,35 +339,3 @@ capturedBS (Parser p) = Parser $ Lift $ Kleisli $ \s -> do
 -- | Match a span and return it as a 'ByteString'.
 bs :: forall m a. (Monad m, Traced Either (Kleisli m)) => Parser m ByteString Char a -> Parser m ByteString Char ByteString
 bs p = fst <$> capturedBS p
-
-instance Uncons [a] a where
-  uncons [] = That []
-  uncons [x] = This x
-  uncons (x : xs) = These x xs
-  nil = []
-
-instance Uncons ByteString Char where
-  uncons bs' = case B.uncons bs' of
-    Nothing -> That bs'
-    Just (w, rest)
-      | B.null rest -> This (w2c w)
-      | otherwise -> These (w2c w) rest
-    where
-      w2c = toEnum . fromIntegral
-  nil = B.empty
-
-instance Uncons ByteString Word8 where
-  uncons bs' = case B.uncons bs' of
-    Nothing -> That bs'
-    Just (w, rest)
-      | B.null rest -> This w
-      | otherwise -> These w rest
-  nil = B.empty
-
-instance Uncons Text Char where
-  uncons t = case T.uncons t of
-    Nothing -> That t
-    Just (c, rest)
-      | T.null rest -> This c
-      | otherwise -> These c rest
-  nil = T.empty

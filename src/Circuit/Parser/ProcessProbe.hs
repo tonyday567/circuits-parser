@@ -5,11 +5,11 @@
 --
 -- The semiring spike resolved the branching-trace gate algebraically, by
 -- summing over all paths through a cyclic choice graph ('SemiringProbe').  The
--- @mealy@ package contains the same phenomenon from the coalgebra side:
+-- @process-stats@ package contains the same phenomenon from the coalgebra side:
 --
 -- * 'Process.Stats.Trace' gives a lazy @Traced (,) Process@ instance.
 -- * 'Process.Stats.Diff' gives reverse-mode AD through a Process scan via
---   'DiffMealy'.
+--   'DiffProcess'.
 --
 -- This probe shows that a tiny parser can be written as a state machine, and
 -- that the machine's parameter gradients coincide with the outside values
@@ -23,37 +23,37 @@
 -- average) because the per-step fixed point @a_t = r * a_t + x_t@ has no lazy
 -- solution.  That is the same obstruction as the naive @Traced Either@ parser
 -- committing to the first successful branch: some feedbacks do not admit the
--- obvious trace.  The replacements are 'DiffMealy''s reverse step and
+-- obvious trace.  The replacements are 'DiffProcess''s reverse step and
 -- 'SemiringProbe.traceCyclic''s Kleene closure respectively.
-module Circuit.Parser.MealyProbe
+module Circuit.Parser.ProcessProbe
   ( -- * Token wrapper for non-differentiable inputs
     Token (..),
 
     -- * Plain Process recognizer
-    abMealy,
+    abProcess,
 
-    -- * Weighted DiffMealy recognizer and gradient bridge
+    -- * Weighted DiffProcess recognizer and gradient bridge
     ABParam (..),
     ABState (..),
     ABMode (..),
-    abDiffMealy,
+    abDiffProcess,
     paramFold,
     paramScan,
-    mealyOutsideDemo,
+    processOutsideDemo,
 
     -- * Soft-stack pushdown parser
     StackParam (..),
     StackState (..),
-    softStackMealy,
+    softStackProcess,
     softStackDemo,
   )
 where
 
-import Process.Stats (Process (..))
-import Process.Stats.Diff (DiffMealy (..), diffFold, diffScan)
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
 import NumHask.Diff (Diff' (..))
+import Process.Stats (Process (..))
+import Process.Stats.Diff (DiffProcess (..), diffFold, diffScan)
 import Prelude
 
 -- $setup
@@ -63,7 +63,7 @@ import Prelude
 -- Non-differentiable input tokens
 -- ---------------------------------------------------------------------------
 
--- | A character wrapped so that it can travel through 'DiffMealy' inputs.
+-- | A character wrapped so that it can travel through 'DiffProcess' inputs.
 --
 -- The character is not a parameter we want gradients for, so addition is
 -- defined to ignore gradients and keep the original token.
@@ -80,16 +80,16 @@ instance Add.Additive Token where
 
 -- | Finite-state recognizer for the language @"ab" | "a"@.
 --
--- >>> scan abMealy "ab"
+-- >>> scan abProcess "ab"
 -- [Just "a",Just "ab"]
 --
--- >>> scan abMealy "b"
+-- >>> scan abProcess "b"
 -- [Nothing]
 --
--- >>> fold abMealy "aab"
+-- >>> fold abProcess "aab"
 -- Nothing
-abMealy :: Process Char (Maybe String)
-abMealy = Process inject step id
+abProcess :: Process Char (Maybe String)
+abProcess = Process inject step id
   where
     inject 'a' = Just "a"
     inject _ = Nothing
@@ -97,7 +97,7 @@ abMealy = Process inject step id
     step _ _ = Nothing
 
 -- ---------------------------------------------------------------------------
--- Weighted DiffMealy recognizer: outside = backprop
+-- Weighted DiffProcess recognizer: outside = backprop
 -- ---------------------------------------------------------------------------
 
 -- | Two scalar weights: @wa@ for matching @'a'@, @wb@ for matching @'b'@.
@@ -126,15 +126,15 @@ instance Add.Additive ABState where
   zero = ABState 0 Start
   ABState w m + ABState w' _ = ABState (w + w') m
 
--- | Weighted recognizer for @"ab" | "a"@ as a 'DiffMealy'.
+-- | Weighted recognizer for @"ab" | "a"@ as a 'DiffProcess'.
 --
 -- The parameters are supplied at every input step; the same parameter value is
 -- reused and the per-step gradients are summed by 'paramFold' to obtain the
 -- total gradient.  This is exactly the outside = backprop-of-inside check run
 -- through a coalgebraic target.
-abDiffMealy :: DiffMealy ABState (ABParam, Token) Double
-abDiffMealy =
-  DiffMealy
+abDiffProcess :: DiffProcess ABState (ABParam, Token) Double
+abDiffProcess =
+  DiffProcess
     { dInject = Diff' $ \(p, Token c) -> case c of
         'a' ->
           ( ABState (abWa p) SawA,
@@ -165,11 +165,11 @@ abDiffMealy =
          in (y, (`ABState` m))
     }
 
--- | Fold a string through a parameterised 'DiffMealy', returning the final
+-- | Fold a string through a parameterised 'DiffProcess', returning the final
 -- output and the total gradient with respect to the parameters.
 paramFold ::
   (Add.Additive s, Add.Additive b, Mul.Multiplicative b, Add.Additive p) =>
-  DiffMealy s (p, Token) b ->
+  DiffProcess s (p, Token) b ->
   p ->
   String ->
   (b, p)
@@ -178,11 +178,11 @@ paramFold m p cs =
       grads = pb Mul.one
    in (y, foldl' (Add.+) Add.zero (map fst grads))
 
--- | Scan a string through a parameterised 'DiffMealy', returning the per-step
+-- | Scan a string through a parameterised 'DiffProcess', returning the per-step
 -- outputs and the total gradient with respect to the parameters.
 paramScan ::
   (Add.Additive s, Add.Additive b, Mul.Multiplicative b, Add.Additive p) =>
-  DiffMealy s (p, Token) b ->
+  DiffProcess s (p, Token) b ->
   p ->
   String ->
   ([b], p)
@@ -198,14 +198,14 @@ paramScan m p cs =
 -- 'Circuit.Parser.SemiringProbe.outsideDemo'.  On input @"a"@ the
 -- value is @2@ and the gradient is @(1, 0)@.
 --
--- >>> mealyOutsideDemo
+-- >>> processOutsideDemo
 -- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
 -- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
-mealyOutsideDemo :: IO ()
-mealyOutsideDemo = do
+processOutsideDemo :: IO ()
+processOutsideDemo = do
   let p = ABParam 2 3
-  print (paramFold abDiffMealy p "ab")
-  print (paramFold abDiffMealy p "a")
+  print (paramFold abDiffProcess p "ab")
+  print (paramFold abDiffProcess p "a")
 
 -- ---------------------------------------------------------------------------
 -- Soft-stack pushdown parser
@@ -237,9 +237,9 @@ instance Add.Additive StackState where
 -- negative squared final height, so a perfect parse scores @0@ and deviations
 -- are penalised quadratically.  With @push = pop = 1@ the score is maximal for
 -- @"ab"@ and @"aabb"@.
-softStackMealy :: DiffMealy StackState (StackParam, Token) Double
-softStackMealy =
-  DiffMealy
+softStackProcess :: DiffProcess StackState (StackParam, Token) Double
+softStackProcess =
+  DiffProcess
     { dInject = Diff' $ \(p, Token c) ->
         let h = case c of
               'a' -> pushAmt p
@@ -280,7 +280,7 @@ softStackMealy =
 softStackDemo :: IO ()
 softStackDemo = do
   let p1 = StackParam 1 1
-  print (paramFold softStackMealy p1 "ab")
-  print (paramFold softStackMealy p1 "aabb")
+  print (paramFold softStackProcess p1 "ab")
+  print (paramFold softStackProcess p1 "aabb")
   let p2 = StackParam 2 1
-  print (paramFold softStackMealy p2 "ab")
+  print (paramFold softStackProcess p2 "ab")

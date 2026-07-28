@@ -21,7 +21,7 @@
 -- The differentiable version uses the same derivative coalgebra, but the
 -- machine carries an accumulated semiring weight and a caller-supplied
 -- differentiable token-weight function.  Extraction multiplies the accumulated
--- weight by the nullable weight of the current derivative, so the 'DiffMealy'
+-- weight by the nullable weight of the current derivative, so the 'DiffProcess'
 -- scan gives the inside value and its gradient w.r.t. the parameters.
 --
 -- === doctests
@@ -30,34 +30,34 @@
 -- >>> import Circuit.Parser.Syntax (charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 --
--- >>> scan (compileMealy (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
+-- >>> scan (compileProcess (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
 -- [Just "a",Just "ab"]
 --
--- >>> fold (compileMealy (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
+-- >>> fold (compileProcess (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
 -- Just "ab"
 --
--- >>> scan (compileMealy (manyS (charS 'a') :: ParserSyntax String Char String)) "aaab"
+-- >>> scan (compileProcess (manyS (charS 'a') :: ParserSyntax String Char String)) "aaab"
 -- [Just "a",Just "aa",Just "aaa",Nothing]
 --
--- >>> mealyCompilerOutsideDemo
+-- >>> processCompilerOutsideDemo
 -- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
 -- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
-module Circuit.Parser.MealyCompiler
+module Circuit.Parser.ProcessCompiler
   ( -- * Plain Process compiler
-    compileMealy,
-    compileMealyWithInput,
+    compileProcess,
+    compileProcessWithInput,
 
     -- * Differentiable machine
     DiffState (..),
-    compileDiffMealy,
+    compileDiffProcess,
 
     -- * Demo
-    mealyCompilerOutsideDemo,
+    processCompilerOutsideDemo,
   )
 where
 
 import Circuit.Parser (Uncons (..))
-import Circuit.Parser.MealyProbe (ABParam (..), Token (..), paramFold)
+import Circuit.Parser.ProcessProbe (ABParam (..), Token (..), paramFold)
 import Circuit.Parser.Syntax
   ( ParserSyntax (..),
     derive,
@@ -66,13 +66,13 @@ import Circuit.Parser.Syntax
   )
 import Control.Applicative (Alternative (empty), (<|>))
 import Data.Maybe (fromMaybe)
-import Process.Stats (Process (..))
-import Process.Stats.Diff (DiffMealy (..))
 import Data.Proxy (Proxy (..))
 import Data.These (These (..))
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
 import NumHask.Diff (Diff, Diff' (..))
+import Process.Stats (Process (..))
+import Process.Stats.Diff (DiffProcess (..))
 import Prelude
 
 -- $setup
@@ -99,13 +99,13 @@ dropOne _ xs = case uncons @f @s xs of
 -- the tokens seen to date.  Extraction succeeds exactly when that derivative
 -- is nullable.
 --
--- >>> scan (compileMealy (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
+-- >>> scan (compileProcess (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
 -- [Just "a",Just "ab"]
-compileMealy ::
+compileProcess ::
   (Eq s, Uncons f s) =>
   ParserSyntax f s a ->
   Process s (Maybe a)
-compileMealy p0 = Process inject step extract
+compileProcess p0 = Process inject step extract
   where
     inject c = derive c p0
     step p c = derive c p
@@ -120,15 +120,15 @@ compileMealy p0 = Process inject step extract
 -- Because a 'Process' has no explicit initial state, the input stream is
 -- captured at compile time and threaded through 'inject' and 'step'.
 --
--- >>> scan (compileMealyWithInput "ab" (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
+-- >>> scan (compileProcessWithInput "ab" (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
 -- [Just ("a","b"),Just ("ab","")]
-compileMealyWithInput ::
+compileProcessWithInput ::
   forall f s a.
   (Eq s, Uncons f s) =>
   f ->
   ParserSyntax f s a ->
   Process s (Maybe (a, f))
-compileMealyWithInput input p0 = Process inject step extract
+compileProcessWithInput input p0 = Process inject step extract
   where
     inject c = (derive c p0, dropOne (Proxy @s) input)
     step (p, rest) c = (derive c p, dropOne (Proxy @s) rest)
@@ -154,20 +154,20 @@ nullableWeight ::
   r
 nullableWeight = maybe Add.zero (const Mul.one) . nullableValue
 
--- | Compile a weighted parser syntax tree into a 'DiffMealy'.
+-- | Compile a weighted parser syntax tree into a 'DiffProcess'.
 --
 -- The caller supplies a differentiable token-weight function
 -- @'Diff' (p, 'Token') r@.  The actual token is selected at runtime, but the
 -- gradient w.r.t. the parameter record @p@ is computed by reverse mode through
 -- the scan.
-compileDiffMealy ::
+compileDiffProcess ::
   forall p r a.
   (Add.Additive p, Add.Additive r, Mul.Multiplicative r) =>
   (Char -> Diff (p, Token) r) ->
   ParserSyntax String Char a ->
-  DiffMealy (DiffState r (ParserSyntax String Char a)) (p, Token) r
-compileDiffMealy weight p0 =
-  DiffMealy
+  DiffProcess (DiffState r (ParserSyntax String Char a)) (p, Token) r
+compileDiffProcess weight p0 =
+  DiffProcess
     { dInject = injectDiff,
       dStep = stepDiff,
       dExtract = extractDiff
@@ -234,20 +234,20 @@ abParserSyntax :: ParserSyntax String Char String
 abParserSyntax = stringS "ab" <|> stringS "a"
 
 -- | Differentiable recogniser for @"ab" | "a"@, compiled from syntax.
-abDiffMealyCompiled ::
-  DiffMealy
+abDiffProcessCompiled ::
+  DiffProcess
     (DiffState Double (ParserSyntax String Char String))
     (ABParam, Token)
     Double
-abDiffMealyCompiled = compileDiffMealy abWeight abParserSyntax
+abDiffProcessCompiled = compileDiffProcess abWeight abParserSyntax
 
--- | Gradient bridge: the compiled 'DiffMealy' reproduces the outside values.
+-- | Gradient bridge: the compiled 'DiffProcess' reproduces the outside values.
 --
--- >>> mealyCompilerOutsideDemo
+-- >>> processCompilerOutsideDemo
 -- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
 -- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
-mealyCompilerOutsideDemo :: IO ()
-mealyCompilerOutsideDemo = do
+processCompilerOutsideDemo :: IO ()
+processCompilerOutsideDemo = do
   let p = ABParam 2 3
-  print (paramFold abDiffMealyCompiled p "ab")
-  print (paramFold abDiffMealyCompiled p "a")
+  print (paramFold abDiffProcessCompiled p "ab")
+  print (paramFold abDiffProcessCompiled p "a")

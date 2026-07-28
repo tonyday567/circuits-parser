@@ -225,7 +225,7 @@ guardThese p def =
 
 -- | True for failure results.
 isThat :: These a f -> Bool
-isThat = these (\_ -> False) (\_ -> True) (\_ _ -> False)
+isThat = these (const False) (const True) (\_ _ -> False)
 
 -- | Consume one element if it satisfies the predicate.
 satisfy :: forall m f s. (Monad m, Uncons f s) => (s -> Bool) -> EqParser m f s s
@@ -340,7 +340,7 @@ bindP (EqParser m) k = EqParser $ C.Lift $ CKleisli $ \s -> do
 
 -- | A parser that always fails without consuming input.
 empty :: (MonadPlus m, Eq f, Eq a) => EqParser m f s a
-empty = EqParser $ C.Lift $ CKleisli $ \_ -> mzero
+empty = EqParser $ C.Lift $ CKleisli $ const mzero
 
 -- | Traced choice: collect successes from both branches.
 --

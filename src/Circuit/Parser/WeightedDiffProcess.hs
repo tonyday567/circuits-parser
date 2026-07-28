@@ -1,35 +1,35 @@
 {-# LANGUAGE GADTs #-}
 
 -- | A small regular/applicative parser syntax used as a lightweight front-end
--- to the 'Circuit.Parser.MealyCompiler' backend.
+-- to the 'Circuit.Parser.ProcessCompiler' backend.
 --
 -- 'WParser' is exactly the regular fragment of 'ParserSyntax' rebuilt without
 -- the full fixed-point machinery.  It exists for demos and teaching; the
--- compiler itself lives in "Circuit.Parser.MealyCompiler".
+-- compiler itself lives in "Circuit.Parser.ProcessCompiler".
 --
 -- === doctests
 --
--- >>> import Circuit.Parser.WeightedDiffMealy (diffMealyOutsideDemo)
--- >>> diffMealyOutsideDemo
+-- >>> import Circuit.Parser.WeightedDiffProcess (diffProcessOutsideDemo)
+-- >>> diffProcessOutsideDemo
 -- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
 -- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
-module Circuit.Parser.WeightedDiffMealy
+module Circuit.Parser.WeightedDiffProcess
   ( -- * Weighted parser syntax
     WParser (..),
     wstring,
 
-    -- * DiffMealy compiler (via MealyCompiler)
-    compileDiffMealy,
+    -- * DiffProcess compiler (via ProcessCompiler)
+    compileDiffProcess,
 
     -- * Demo
     ABParam (..),
-    abDiffMealy,
-    diffMealyOutsideDemo,
+    abDiffProcess,
+    diffProcessOutsideDemo,
   )
 where
 
-import Circuit.Parser.MealyCompiler qualified as MC
-import Circuit.Parser.MealyProbe (ABParam (..), Token (..), paramFold)
+import Circuit.Parser.ProcessCompiler qualified as MC
+import Circuit.Parser.ProcessProbe (ABParam (..), Token (..), paramFold)
 import Circuit.Parser.Syntax
   ( ParserSyntax,
     anyTokenS,
@@ -38,14 +38,14 @@ import Circuit.Parser.Syntax
     stringS,
   )
 import Control.Applicative (Alternative (empty), (<|>))
-import Process.Stats.Diff (DiffMealy (..))
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
 import NumHask.Diff (Diff, Diff' (..))
+import Process.Stats.Diff (DiffProcess (..))
 import Prelude
 
 -- $setup
--- >>> import Circuit.Parser.WeightedDiffMealy (diffMealyOutsideDemo)
+-- >>> import Circuit.Parser.WeightedDiffProcess (diffProcessOutsideDemo)
 
 -- ---------------------------------------------------------------------------
 -- Weighted parser syntax
@@ -80,14 +80,14 @@ toParserSyntax (WString cs) = stringS cs
 toParserSyntax (WAlt p1 p2) = toParserSyntax p1 <|> toParserSyntax p2
 toParserSyntax (WFmap g p) = g <$> toParserSyntax p
 
--- | Compile a weighted 'WParser' into a 'DiffMealy' via the shared
--- 'Circuit.Parser.MealyCompiler' backend.
-compileDiffMealy ::
+-- | Compile a weighted 'WParser' into a 'DiffProcess' via the shared
+-- 'Circuit.Parser.ProcessCompiler' backend.
+compileDiffProcess ::
   (Add.Additive p, Add.Additive r, Mul.Multiplicative r) =>
   (Char -> Diff (p, Token) r) ->
   WParser Char a ->
-  DiffMealy (MC.DiffState r (ParserSyntax String Char a)) (p, Token) r
-compileDiffMealy weight = MC.compileDiffMealy weight . toParserSyntax
+  DiffProcess (MC.DiffState r (ParserSyntax String Char a)) (p, Token) r
+compileDiffProcess weight = MC.compileDiffProcess weight . toParserSyntax
 
 -- ---------------------------------------------------------------------------
 -- Demo: "ab" | "a" with per-token weights
@@ -113,20 +113,20 @@ abWParser :: WParser Char String
 abWParser = WString "ab" `WAlt` WString "a"
 
 -- | Differentiable recogniser for @"ab" | "a"@.
-abDiffMealy ::
-  DiffMealy
+abDiffProcess ::
+  DiffProcess
     (MC.DiffState Double (ParserSyntax String Char String))
     (ABParam, Token)
     Double
-abDiffMealy = compileDiffMealy abWeight abWParser
+abDiffProcess = compileDiffProcess abWeight abWParser
 
--- | Gradient bridge: the 'DiffMealy' scan reproduces the outside values.
+-- | Gradient bridge: the 'DiffProcess' scan reproduces the outside values.
 --
--- >>> diffMealyOutsideDemo
+-- >>> diffProcessOutsideDemo
 -- (6.0,ABParam {abWa = 3.0, abWb = 2.0})
 -- (2.0,ABParam {abWa = 1.0, abWb = 0.0})
-diffMealyOutsideDemo :: IO ()
-diffMealyOutsideDemo = do
+diffProcessOutsideDemo :: IO ()
+diffProcessOutsideDemo = do
   let p = ABParam 2 3
-  print (paramFold abDiffMealy p "ab")
-  print (paramFold abDiffMealy p "a")
+  print (paramFold abDiffProcess p "ab")
+  print (paramFold abDiffProcess p "a")

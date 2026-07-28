@@ -26,8 +26,8 @@ where
 
 import Circuit.Parser (Parser, These (..), Uncons (..), char, runParserIdentity, satisfy, some, (<|>))
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
-import Data.Functor.Identity (Identity)
 import Data.Foldable (toList)
+import Data.Functor.Identity (Identity)
 import Data.IntMap.Strict qualified as IntMap
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -162,5 +162,3 @@ takeTopN n vocab =
       newFwd = Map.fromList (zip tokensToKeep [0 ..])
       newRev = IntMap.fromList (zip [0 ..] tokensToKeep)
    in Vocabulary newFwd newRev (length tokensToKeep)
-
-

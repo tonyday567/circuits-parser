@@ -2,6 +2,8 @@
 
 Parser combinators for the circuits ecosystem. A `Parser` is a circuit whose base arrow decomposes a stream one element at a time. Both the primitive that peels a stream (`uncons`) and the composite that runs a parse (`runParser`) are `These`-coalgebras on the stream type `f`. That single sentence is the whole design.
 
+The stream coalgebra (`These`, `Uncons`) lives in `Circuit.Stream`; `Circuit.Parser` re-exports it and layers the traced-monoidal parser syntax on top.
+
 ## the shape
 
 Start from what it means to take a coinductive thing apart one element at a time. One peel yields *at least one of* {head, tail} — never neither, since neither is no observation at all. So the codomain is an inclusive-or-with-witness, and that is exactly `These`:

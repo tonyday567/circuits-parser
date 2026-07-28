@@ -6,6 +6,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -105,7 +106,6 @@ where
 import Circuit qualified as C
 import Circuit.Algebra
   ( Algebra (..),
-    (:+:) (..),
     SigCompose (..),
     SigCopyDiscard (..),
     SigKnot (..),
@@ -114,6 +114,7 @@ import Circuit.Algebra
     SigSwap (..),
     Syntax (..),
     evalInto,
+    (:+:) (..),
   )
 import Circuit.Category (Category (..), (.>))
 import Circuit.Channel (Traced, strengthD)
@@ -202,6 +203,7 @@ composeN g f = Op (L (SigCompose g f))
 --
 -- @f .>> g@ runs @f@ then @g@.
 infixl 1 .>>
+
 (.>>) ::
   Syntax (ParserNetSig f s) (Kleisli Identity) a b ->
   Syntax (ParserNetSig f s) (Kleisli Identity) b c ->
@@ -323,7 +325,7 @@ eitherToThese (Left f) = That f
 eitherToThese (Right (a, f)) = These a f
 
 -- | Convert the parser result type back to the net result type.
-theseToEither :: forall f s a. Uncons f s => These a f -> Either f (a, f)
+theseToEither :: forall f s a. (Uncons f s) => These a f -> Either f (a, f)
 theseToEither (This a) = Right (a, nil @f @s)
 theseToEither (These a f) = Right (a, f)
 theseToEither (That f) = Left f
@@ -352,16 +354,16 @@ assocLPair (a, (b, c)) = ((a, b), c)
 -- Primitive constructors
 -- ---------------------------------------------------------------------------
 
-nextN :: forall f s. Uncons f s => ParserNet f s s
+nextN :: forall f s. (Uncons f s) => ParserNet f s s
 nextN = ParserNet $ liftK $ \input -> case uncons @f @s input of
   That rest -> Left rest
   This s' -> Right (s', nil @f @s)
   These s' rest -> Right (s', rest)
 
-anyTokenN :: forall f s. Uncons f s => ParserNet f s s
+anyTokenN :: forall f s. (Uncons f s) => ParserNet f s s
 anyTokenN = nextN
 
-satisfyN :: forall f s. Uncons f s => (s -> Bool) -> ParserNet f s s
+satisfyN :: forall f s. (Uncons f s) => (s -> Bool) -> ParserNet f s s
 satisfyN p = ParserNet $ liftK $ \input -> case uncons @f @s input of
   That rest -> Left rest
   This s' -> if p s' then Right (s', nil @f @s) else Left input
@@ -385,36 +387,36 @@ charN c = satisfyN (== c)
 -- >>> runParserNetIdentity (stringN "ab" :: ParserNet String Char String) "ab"
 -- These "ab" ""
 stringN :: forall f s. (Eq s, Uncons f s) => [s] -> ParserNet f s [s]
-stringN [] = ParserNet $ liftK $ \f -> Right ([], f)
-stringN (c : cs) = (:) <$> charN c <*> stringN cs
+stringN = foldr (\c -> (<*>) ((:) <$> charN c)) (ParserNet $ liftK $ \f -> Right ([], f))
 
-endOfInputN :: forall f s. Uncons f s => ParserNet f s ()
+endOfInputN :: forall f s. (Uncons f s) => ParserNet f s ()
 endOfInputN = ParserNet $ liftK $ \input -> case uncons @f @s input of
   That _ -> Right ((), input)
   _ -> Left input
 
-takeRestN :: forall f s. Uncons f s => ParserNet f s f
+takeRestN :: forall f s. (Uncons f s) => ParserNet f s f
 takeRestN = ParserNet $ liftK $ \input -> Right (input, nil @f @s)
 
 -- ---------------------------------------------------------------------------
 -- Instances
 -- ---------------------------------------------------------------------------
 
-instance Uncons f s => Functor (ParserNet f s) where
+instance (Uncons f s) => Functor (ParserNet f s) where
   fmap g (ParserNet p) = ParserNet $ composeN (liftK (applyValue g)) p
 
-instance Uncons f s => Applicative (ParserNet f s) where
+instance (Uncons f s) => Applicative (ParserNet f s) where
   pure a = ParserNet $ liftK $ \f -> Right (a, f)
 
   (<*>) :: forall a b. ParserNet f s (a -> b) -> ParserNet f s a -> ParserNet f s b
-  ParserNet pf <*> ParserNet pa = ParserNet $
-    copyN
-      .>> parN pf (liftK id)
-      .>> swapN
-      .>> liftK distRight
-      .>> liftK (bimap fst id)
-      .>> mapRightN h
-      .>> liftK joinEither
+  ParserNet pf <*> ParserNet pa =
+    ParserNet $
+      copyN
+        .>> parN pf (liftK id)
+        .>> swapN
+        .>> liftK distRight
+        .>> liftK (first fst)
+        .>> mapRightN h
+        .>> liftK joinEither
     where
       h =
         liftK assocLPair
@@ -428,7 +430,7 @@ instance (Uncons f s) => Monad (ParserNet f s) where
 instance (Uncons f s) => Alternative (ParserNet f s) where
   empty = ParserNet $ liftK Left
 
-  -- | Traced choice over @Either@.
+  -- \| Traced choice over @Either@.
   --
   -- >>> runParserNetIdentity (stringN "ab" <|> stringN "a" :: ParserNet String Char String) "ab"
   -- These "ab" ""
@@ -442,7 +444,7 @@ instance (Uncons f s) => Alternative (ParserNet f s) where
   ParserNet p1 <|> ParserNet p2 = ParserNet $ knotN body
     where
       p1' :: Syntax (ParserNetSig f s) (Kleisli Identity) f (Either f (Either f (a, f)))
-      p1' = p1 .>> liftK (bimap id Right)
+      p1' = p1 .>> liftK (second Right)
 
       p2' :: Syntax (ParserNetSig f s) (Kleisli Identity) f (Either f (Either f (a, f)))
       p2' = p2 .>> liftK Right
@@ -461,7 +463,7 @@ instance (Uncons f s) => MonadPlus (ParserNet f s)
 --
 -- >>> runParserNetIdentity (manyN (charN 'a') :: ParserNet String Char String) "aaab"
 -- These "aaa" "b"
-manyN :: forall f s a. Uncons f s => ParserNet f s a -> ParserNet f s [a]
+manyN :: forall f s a. (Uncons f s) => ParserNet f s a -> ParserNet f s [a]
 manyN p = ParserNet $ knotN body .>> liftK Right
   where
     runP :: Syntax (ParserNetSig f s) (Kleisli Identity) (f, [a]) (Either (f, [a]) ([a], f))
@@ -476,13 +478,13 @@ manyN p = ParserNet $ knotN body .>> liftK Right
           )
 
     body :: Syntax (ParserNetSig f s) (Kleisli Identity) (Either (f, [a]) f) (Either (f, [a]) ([a], f))
-    body = eitherCaseN runP (liftK (\s -> (s, [])) .>> runP)
+    body = eitherCaseN runP (liftK (,[]) .>> runP)
 
 -- | One or more repetitions.
 --
 -- >>> runParserNetIdentity (someN (charN 'a') :: ParserNet String Char String) "aaab"
 -- These "aaa" "b"
-someN :: Uncons f s => ParserNet f s a -> ParserNet f s [a]
+someN :: (Uncons f s) => ParserNet f s a -> ParserNet f s [a]
 someN p = (:) <$> p <*> manyN p
 
 -- ---------------------------------------------------------------------------
@@ -507,4 +509,4 @@ runParserNetIdentity ::
   ParserNet f s a ->
   f ->
   These a f
-runParserNetIdentity p input = PU.runParserIdentity (runParserNet p) input
+runParserNetIdentity p = PU.runParserIdentity (runParserNet p)
