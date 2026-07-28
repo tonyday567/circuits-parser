@@ -15,7 +15,10 @@ module Circuit.Stream
     -- * Stream coalgebra
     Uncons (..),
 
-    -- * Stream algebra (dual)
+    -- * Stream algebra (left construction dual)
+    Cons (..),
+
+    -- * Stream algebra (right construction dual)
     Snoc (..),
   )
 where
@@ -36,10 +39,19 @@ class Uncons f s where
   uncons :: f -> These s f
   nil :: f
 
--- | Stream algebra: construct a stream by appending one token on the right.
+-- | Stream algebra: construct a stream by prepending one token on the left.
 --
 -- This is the construction dual of 'Uncons'.  Together they let code move
 -- back and forth between tokens and streams using the same coalgebra.
+class Cons f s where
+  -- | Prepend one token to the left of a stream.
+  cons :: s -> f -> f
+  -- | The empty stream.
+  consNil :: f
+
+-- | Stream algebra: construct a stream by appending one token on the right.
+--
+-- This is the right-handed dual of 'Uncons'.
 class Snoc f s where
   -- | Append one token to the right of a stream.
   snoc :: f -> s -> f
@@ -51,6 +63,10 @@ instance Uncons [a] a where
   uncons [x] = This x
   uncons (x : xs) = These x xs
   nil = []
+
+instance Cons [a] a where
+  cons = (:)
+  consNil = []
 
 instance Snoc [a] a where
   snoc xs x = xs ++ [x]
