@@ -7,6 +7,8 @@ packages:
   ../harpie-numhask/harpie-numhask.cabal
   ../process-stats/process-stats.cabal
   /Users/tonyday567/other/logict/logict.cabal
+  /Users/tonyday567/other/aeson/aeson.cabal
+  /Users/tonyday567/other/cassava/cassava.cabal
   /Users/tonyday567/other/attoparsec/attoparsec.cabal
   /Users/tonyday567/other/flatparse/flatparse.cabal
   /Users/tonyday567/other/megaparsec/megaparsec.cabal

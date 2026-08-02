@@ -111,6 +111,7 @@ runParserError :: (Uncons f s) => Parser f s a -> f -> a
 | layer | modules | role |
 |-------|---------|------|
 | **core** | `Circuit.Parser`, `.Lexer`, `.Token`, `.Primitives` | stream coalgebra + combinators + fast lexers |
+| **dialects** | `Circuit.Parser.Json*`, `Circuit.Parser.Csv*` | canonical domain parsers on the core — the worked examples of the coalgebra claim |
 | **specialty** | `Data.Markup*` (chart-svg) | HTML/XML-ish tokenize → gather → render |
 | **examples** | `examples/deck.md` | domain dialects (card/deck marks) — not library API |
 
