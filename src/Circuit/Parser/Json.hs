@@ -1,5 +1,6 @@
--- | JSON for the circuits ecosystem: the parsing contact of aeson, rebuilt
--- on "Circuit.Parser" combinators.
+-- | JSON for the circuits ecosystem: the aeson contact, rebuilt on
+-- "Circuit.Parser" combinators — 'decodeJson' parses, 'encodeJson' renders,
+-- and the two are exact tree inverses.
 --
 -- Recursive descent over the @Uncons ByteString Char@ stream; string and
 -- number payloads are captured as zero-copy slices ('bs') and converted
@@ -28,6 +29,7 @@ module Circuit.Parser.Json
 
     -- * Boundary
     decodeJson,
+    encodeJson,
 
     -- * Fast path
     JsonToken (..),
@@ -45,16 +47,22 @@ import Circuit.Parser.Json.Value (Json (..))
 import Control.Monad (void)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
-import Data.Char (isDigit)
+import Data.ByteString.Builder (Builder, byteString, stringUtf8, toLazyByteString)
+import Data.ByteString.Lazy qualified as BL
+import Data.Char (isDigit, ord)
 import Data.Functor (($>))
 import Data.Functor.Identity (Identity)
-import Data.Scientific (Scientific, scientific)
+import Data.Scientific (Scientific, base10Exponent, coefficient, scientific)
 import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding (encodeUtf8)
 import Data.Vector qualified as V
 import Data.Word (Word8)
+import Numeric (showHex)
 
 -- $setup
 -- >>> import Data.ByteString.Char8 qualified as C
+-- >>> import Data.Vector qualified as V
 
 -- | JSON whitespace: space, newline, carriage return, tab. Nothing else.
 ws :: Parser Identity ByteString Char ()
@@ -150,6 +158,78 @@ decodeJson s = case runParserIdentity (value <* ws <* endOfInput) s of
   This j -> Right j
   These j _ -> Right j
   That _ -> Left "invalid JSON"
+
+-- | Render a JSON document, compact (no insignificant whitespace).
+--
+-- The other half of the boundary: 'decodeJson' and 'encodeJson' are exact
+-- tree inverses —
+--
+-- prop> decodeJson (encodeJson j) == Right j
+--
+-- Numbers render in a form the parser reads back to the /same/
+-- 'Scientific' (its equality is structural): zero exponent renders the
+-- bare coefficient (@10@), a positive exponent renders coefficient and
+-- exponent (@1e1@, not @10@), and a negative exponent renders the decimal
+-- point positionally, keeping every fractional digit (@1.50@, @0.0015@).
+-- Object pairs render in tree order; duplicate keys are preserved, as
+-- they are in the tree.
+--
+-- >>> encodeJson (JObject [("a", JArray (V.fromList [JNumber 1, JBool True, JNull]))])
+-- "{\"a\":[1,true,null]}"
+--
+-- >>> encodeJson (JString "a\nb")
+-- "\"a\\nb\""
+encodeJson :: Json -> ByteString
+encodeJson = BL.toStrict . toLazyByteString . go
+  where
+    go JNull = stringUtf8 "null"
+    go (JBool b) = stringUtf8 (if b then "true" else "false")
+    go (JNumber n) = scientificJson n
+    go (JString t) = textJson t
+    go (JArray xs) = comma '[' ']' (go <$> V.toList xs)
+    go (JObject ps) = comma '{' '}' (pair <$> ps)
+    pair (k, v) = textJson k <> stringUtf8 ":" <> go v
+    comma open close xs =
+      stringUtf8 [open] <> mconcat (intersperseB (stringUtf8 ",") xs) <> stringUtf8 [close]
+    intersperseB _ [] = []
+    intersperseB _ [x] = [x]
+    intersperseB s (x : xs) = x : s : intersperseB s xs
+
+-- | A JSON string literal: quotes, @\"@, @\\@ and control characters
+-- escaped (short forms where the grammar has them, @\\u00XX@ otherwise);
+-- everything else raw UTF-8.
+textJson :: Text -> Builder
+textJson t = stringUtf8 "\"" <> byteString (encodeUtf8 (T.concatMap esc t)) <> stringUtf8 "\""
+  where
+    esc c = T.pack $ case c of
+      '"' -> "\\\""
+      '\\' -> "\\\\"
+      '\b' -> "\\b"
+      '\f' -> "\\f"
+      '\n' -> "\\n"
+      '\r' -> "\\r"
+      '\t' -> "\\t"
+      _ | ord c < 0x20 -> "\\u" <> pad (showHex (ord c) "")
+        | otherwise -> [c]
+    pad h = replicate (4 - length h) '0' ++ h
+
+-- | A JSON number, rendered to invert 'jnumber' structurally (see
+-- 'encodeJson').
+scientificJson :: Scientific -> Builder
+scientificJson n = stringUtf8 rendered
+  where
+    c = coefficient n
+    e = base10Exponent n
+    rendered
+      | e == 0 = show c
+      | e > 0 = show c <> "e" <> show e
+      | otherwise = sign <> digitsWithPoint
+    sign = if c < 0 then "-" else ""
+    ds = show (abs c)
+    p = length ds + e -- digits before the point
+    digitsWithPoint
+      | p > 0 = take p ds <> "." <> drop p ds
+      | otherwise = "0." <> replicate (negate p) '0' <> ds
 
 -- * internals
 

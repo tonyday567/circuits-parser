@@ -31,7 +31,7 @@ import System.IO (hPutStrLn, stderr)
 
 main :: IO ()
 main = do
-  let closed = concat [valueCases, numberCases, stringCases, rejectCases, lexerCases, csvCases]
+  let closed = concat [valueCases, numberCases, stringCases, rejectCases, lexerCases, encodeCases, csvCases]
   corpusFails <- corpus
   let fails = closed ++ corpusFails ++ csvDiff ++ csvDivergences
   if null fails
@@ -122,6 +122,51 @@ lexerCases =
         "lexer unterminated"
         (Left (3, "unterminated string"))
         (runJsonLexerBS "\"ab")
+    ]
+
+-- | A tree roundtrip pin: 'encodeJson' then 'decodeJson' must return the
+-- /same/ tree ('Scientific' equality is structural, so this pins the
+-- number rendering, not just the value).
+rt :: String -> Json -> [String]
+rt name j = check ("roundtrip " ++ name) (Right j) (dec (encodeJson j))
+
+enc :: String -> B.ByteString -> Json -> [String]
+enc name expected j = check ("encode " ++ name) expected (encodeJson j)
+
+encodeCases :: [String]
+encodeCases =
+  concat
+    [ -- literal pins: compact, ordered, duplicates kept
+      enc "object" "{\"a\":[1,true,null]}" (JObject [("a", JArray (V.fromList [num 1 0, JBool True, JNull]))]),
+      enc "key order" "{\"b\":1,\"a\":2}" (JObject [("b", num 1 0), ("a", num 2 0)]),
+      enc "duplicate keys" "{\"a\":1,\"a\":2}" (JObject [("a", num 1 0), ("a", num 2 0)]),
+      enc "empty object" "{}" (JObject []),
+      enc "empty array" "[]" (JArray V.empty),
+      -- number rendering inverts the parser structurally
+      enc "zero exponent" "10" (num 10 0),
+      enc "positive exponent" "1e1" (num 1 1),
+      enc "negative exponent" "1.50" (num 150 (-2)),
+      enc "leading zeros after point" "0.0015" (num 15 (-4)),
+      enc "zero coefficient" "0" (num 0 0),
+      enc "zero coefficient, exponent" "0e5" (num 0 5),
+      enc "negative coefficient" "-1.50" (num (-150) (-2)),
+      enc "negative, positive exponent" "-1e1" (num (-1) 1),
+      -- string escapes
+      enc "newline" "\"a\\nb\"" (JString "a\nb"),
+      enc "quote and backslash" "\"\\\"q\\\" \\\\\"" (JString "\"q\" \\"),
+      enc "control char" "\"\\u0001\"" (JString "\SOH"),
+      enc "unicode raw" "\"\206\187\"" (JString "\x3bb"),
+      -- tree roundtrips (structural)
+      rt "scalar" (JBool False),
+      rt "numbers" (JArray (V.fromList [num 10 0, num 1 1, num 150 (-2), num 15 (-4), num (-150) (-2), num 0 5])),
+      rt "nested with escapes"
+        ( JObject
+            [ ("msg", JString "line1\nline2 \"quoted\" \x3bb"),
+              ("tags", JArray (V.fromList [JString "a", JNull])),
+              ("dup", JNumber (scientific 1 1)),
+              ("dup", JNumber (scientific 10 0))
+            ]
+        )
     ]
 
 -- * JSONTestSuite corpus
