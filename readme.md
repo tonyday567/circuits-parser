@@ -106,6 +106,16 @@ runParserMaybe :: (Uncons f s) => Parser f s a -> f -> Maybe a
 runParserError :: (Uncons f s) => Parser f s a -> f -> a
 ```
 
+### errors
+
+The combinator runner has no position channel — a failure is just 'That'
+with the intact stream, so boundary extractors report a flat failure. For
+positioned or structured errors, change the base monad: `StateT s
+(ExceptT e n)` carries offsets, `LogicT n` supports nondeterminism. The
+lexer layer (`Circuit.Parser.Lexer`, `Circuit.Parser.Json.Lexer`,
+`Circuit.Parser.Csv.Lexer`) keeps byte offsets and is the right place to
+report "unexpected X at offset Y".
+
 ## package map
 
 | layer | modules | role |

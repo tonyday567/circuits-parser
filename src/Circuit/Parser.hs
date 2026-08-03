@@ -17,6 +17,16 @@
 -- First-line libraries add 'Applicative', 'Alternative', 'Monad', and
 -- 'MonadLogic' instances on top of this syntax.
 --
+-- === the intact-stream law
+--
+-- Every parser that fails returns 'That' carrying the /intact original/
+-- stream. This is the invariant that makes '<|>' backtrack: the next
+-- alternative receives the same stream the previous one started with. If a
+-- composite parser consumes input before failing, its 'That' carries the
+-- stream /at the point of failure/, so the next alternative will silently
+-- start from a partially consumed position. 'try' repairs exactly that:
+-- wrap a composite alternative when it may consume input and then fail.
+--
 -- === doctests
 --
 -- >>> runParserIdentity (char 'a') "abc"
@@ -91,6 +101,15 @@ module Circuit.Parser
     sepBy1,
     chainr,
 
+    -- * Capture
+    capturedBS,
+    bs,
+    span,
+    span1,
+
+    -- * Inspection
+    peek,
+
     -- * Backtracking
     try,
 
@@ -102,10 +121,6 @@ module Circuit.Parser
 
     -- * Line endings
     lineEnd,
-
-    -- * Capture
-    capturedBS,
-    bs,
   )
 where
 
@@ -124,7 +139,7 @@ import Data.Char (isAscii)
 import Data.Functor (($>))
 import Data.Functor.Identity (Identity (..))
 import Data.These (these)
-import Prelude hiding (id, (.))
+import Prelude hiding (id, span, (.))
 
 -- $setup
 -- >>> import Data.Functor.Identity (Identity)
@@ -296,10 +311,11 @@ sepBy :: forall m f s a b. (Monad m, Uncons f s, Traced Either (Kleisli m)) => P
 sepBy p sep = sepBy1 p sep <|> pure []
 
 -- | Parse one or more occurrences separated by a separator.
--- The separator is discarded. Uses committing '>>=' so separator consumption
--- is not backtracked.
+-- The separator is discarded. /Trailing separators are rejected/: after a
+-- separator, the element parser must succeed. Use 'try' on the separator
+-- yourself only if you genuinely want to allow trailing separators.
 sepBy1 :: forall m f s a b. (Monad m, Uncons f s, Traced Either (Kleisli m)) => Parser m f s a -> Parser m f s b -> Parser m f s [a]
-sepBy1 p sep = p >>= \x -> many (try (sep >> p)) >>= \xs -> pure (x : xs)
+sepBy1 p sep = p >>= \x -> many (sep >> p) >>= \xs -> pure (x : xs)
 
 -- | Right-fold chain combinator.
 chainr :: forall m f s a b. (Monad m, Uncons f s, Traced Either (Kleisli m)) => (a -> b -> b) -> Parser m f s a -> Parser m f s b -> Parser m f s b
@@ -308,6 +324,11 @@ chainr f p z = go
     go = (f <$> p <*> go) <|> z
 
 -- | Attempt a parser. If it fails with 'That', restore the original stream.
+--
+-- This matters for composite alternatives consumed by '<|>': a parser that
+-- consumes input before failing would otherwise hand the next alternative a
+-- partially-consumed stream. Wrap the composite in 'try' when that is
+-- possible.
 try :: forall m f s a. (Monad m, Uncons f s, Traced Either (Kleisli m)) => Parser m f s a -> Parser m f s a
 try (Parser p) = Parser $ Lift $ Kleisli $ \s -> do
   res <- runKleisli (run p) s
@@ -339,3 +360,48 @@ capturedBS (Parser p) = Parser $ Lift $ Kleisli $ \s -> do
 -- | Match a span and return it as a 'ByteString'.
 bs :: forall m a. (Monad m, Traced Either (Kleisli m)) => Parser m ByteString Char a -> Parser m ByteString Char ByteString
 bs p = fst <$> capturedBS p
+
+-- | Capture a (possibly empty) span of elements satisfying the predicate.
+-- The result is the list of captured elements; for zero-copy capture of a
+-- 'ByteString' span, prefer 'bs' with 'skipWhile'.
+span :: forall m f s. (Monad m, Uncons f s) => (s -> Bool) -> Parser m f s [s]
+span p = Parser $ Lift $ Kleisli $ \s -> pure $ go [] s
+  where
+    go acc s0 = case uncons @f @s s0 of
+      That _ -> These (reverse acc) s0
+      This x
+        | p x -> These (reverse (x : acc)) (nil @f @s)
+        | otherwise -> These (reverse acc) s0
+      These x s'
+        | p x -> go (x : acc) s'
+        | otherwise -> These (reverse acc) s0
+
+-- | Capture a non-empty span of elements satisfying the predicate. Fails if
+-- the next element does not satisfy the predicate.
+span1 :: forall m f s. (Monad m, Uncons f s) => (s -> Bool) -> Parser m f s [s]
+span1 p = Parser $ Lift $ Kleisli $ \s -> pure $
+  case uncons @f @s s of
+    That _ -> That s
+    This x
+      | p x -> These [x] (nil @f @s)
+      | otherwise -> That s
+    These x s'
+      | p x -> go [x] s'
+      | otherwise -> That s
+  where
+    go acc s0 = case uncons @f @s s0 of
+      That _ -> These (reverse acc) s0
+      This x
+        | p x -> These (reverse (x : acc)) (nil @f @s)
+        | otherwise -> These (reverse acc) s0
+      These x s'
+        | p x -> go (x : acc) s'
+        | otherwise -> These (reverse acc) s0
+
+-- | Return the next element without consuming the stream. Fails at end of
+-- input.
+peek :: forall m f s. (Monad m, Uncons f s) => Parser m f s s
+peek = Parser $ Lift $ Kleisli $ \s -> pure $ case uncons @f @s s of
+  That _ -> That s
+  This x -> These x s
+  These x _ -> These x s

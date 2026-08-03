@@ -29,6 +29,13 @@ import Data.Text qualified as T
 import Data.Word (Word8)
 import "circuits" Circuit.Stream (Cons (..), Snoc (..), These (..), Uncons (..))
 
+-- | Strict 'ByteString' as a stream of 'Char'.
+--
+-- /Warning/: bytes @>= 0x80@ are exposed as raw-byte 'Char's via
+-- @toEnum . fromIntegral@, not decoded UTF-8. If you parse text content
+-- char-wise and convert to 'String' or 'Text', multibyte characters will
+-- mojibake. The safe pattern is to recognise structure byte-wise and decode
+-- complete spans once (see the json/csv dialects for examples).
 instance Uncons ByteString Char where
   uncons bs' = case B.uncons bs' of
     Nothing -> That bs'
