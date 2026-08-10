@@ -14,7 +14,4 @@ packages:
   /Users/tonyday567/other/megaparsec/megaparsec.cabal
   /Users/tonyday567/other/parsec/parsec.cabal
 
-constraints:
-  circuits >= 0.3
-
 write-ghc-environment-files: always
