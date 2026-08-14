@@ -3,7 +3,7 @@
 
 -- | Small, value-sized square-matrix helpers for semiring closure.
 --
--- This module replaces the previous dependency on @Harpie.NumHask.Matrix@.
+-- This module replaces the previous dependency on @Circuit.Mat.Dense@.
 -- It intentionally uses plain lists rather than typed arrays, because the
 -- matrices here are indexed by runtime parser states and are dense and small.
 module Circuit.Parser.Matrix

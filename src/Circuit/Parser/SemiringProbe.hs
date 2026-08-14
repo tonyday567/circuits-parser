@@ -481,7 +481,7 @@ sumR = foldr (Add.+) Add.zero
 -- Square matrix toolbox for Kleene star
 -- ---------------------------------------------------------------------------
 --
--- The canonical matrix carrier lives in "Harpie.NumHask.Matrix".
+-- The canonical matrix carrier lives in "Circuit.Mat.Dense".
 feedbackClosure ::
   (Eq a) =>
   (a -> [(a, r)]) ->
