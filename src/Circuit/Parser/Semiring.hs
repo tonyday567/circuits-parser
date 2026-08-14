@@ -13,7 +13,7 @@ module Circuit.Parser.Semiring
     NHR.StarSemiring,
     NHR.KleeneAlgebra,
     NHG.Idempotent,
-    NHT.MinPlus (..),
+    NHC.MinPlus (..),
     NHC.Warshall (..),
 
     -- * Local carriers
@@ -32,7 +32,6 @@ import NumHask.Algebra.Additive qualified as NHA
 import NumHask.Algebra.Group qualified as NHG
 import NumHask.Algebra.Multiplicative qualified as NHM
 import NumHask.Algebra.Ring qualified as NHR
-import NumHask.Algebra.Tropical qualified as NHT
 import NumHask.Free.Carriers qualified as NHC
 import Prelude
 
