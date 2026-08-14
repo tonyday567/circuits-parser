@@ -91,7 +91,7 @@ import Data.Kind (Constraint, Type)
 import Data.List (elemIndex, sortOn)
 import Data.Maybe (fromMaybe)
 import Data.These (These (..), these)
-import Harpie.NumHask.Matrix (fromLists, starMatrix, toLists)
+import Circuit.Parser.Matrix (fromLists, starMatrix, toLists)
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
 import NumHask.Algebra.Ring qualified as Ring
