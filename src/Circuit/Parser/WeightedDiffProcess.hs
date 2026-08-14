@@ -40,7 +40,7 @@ import Circuit.Parser.Syntax
 import Control.Applicative (Alternative (empty), (<|>))
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
-import NumHask.Diff (Diff, Diff' (..))
+import Circuit.Diff (Diff, Diff' (..))
 import Process.Stats.Diff (DiffProcess (..))
 import Prelude
 

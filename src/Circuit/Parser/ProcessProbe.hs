@@ -51,7 +51,7 @@ where
 
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
-import NumHask.Diff (Diff' (..))
+import Circuit.Diff (Diff' (..))
 import Process.Stats (Process (..))
 import Process.Stats.Diff (DiffProcess (..), diffFold, diffScan)
 import Prelude
