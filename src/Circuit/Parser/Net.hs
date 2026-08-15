@@ -73,7 +73,7 @@
 -- Implementation note: 'SigBimonoid' used to bundle copy/discard with
 -- plus/zero, and parser plumbing only ever needs copy/discard.  The upstream
 -- split into 'SigCopyDiscard' / 'SigMergeZero' means this module now carries
--- only the 'Dg.CopyDiscard' instance for @Kleisli Identity@; the degenerate
+-- only the 'Dg.Copy' and 'Dg.Discard' instances for @Kleisli Identity@; the degenerate
 -- 'MergeZero' orphan is gone.
 module Circuit.Parser.Net
   ( -- * Extra signatures
@@ -245,7 +245,7 @@ bindN ::
 bindN m k = Op (R (R (R (R (R (R (R (R (Bind m k)))))))))
 
 -- ---------------------------------------------------------------------------
--- Copy/discard instance for the base arrow
+-- Copy / discard instances for the base arrow
 --
 -- Parser plumbing only ever uses 'copy' and 'discard' (to thread the input
 -- stream).  'SigMergeZero' is present in the signature because 'AlgNet'
@@ -253,8 +253,10 @@ bindN m k = Op (R (R (R (R (R (R (R (R (Bind m k)))))))))
 -- instance is required.
 -- ---------------------------------------------------------------------------
 
-instance Dg.CopyDiscard (Kleisli Identity) a where
+instance Dg.Copy (Kleisli Identity) a where
   copy = Kleisli $ \a -> Identity (a, a)
+
+instance Dg.Discard (Kleisli Identity) a where
   discard = Kleisli $ \_ -> Identity ()
 
 -- ---------------------------------------------------------------------------
