@@ -27,7 +27,7 @@
 -- [Just "a",Just "ab"]
 --
 -- >>> fold (compileProcess (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
--- Just "ab"
+-- Just (Just "ab")
 --
 -- >>> scan (compileProcess (manyS (charS 'a') :: ParserSyntax String Char String)) "aaab"
 -- [Just "a",Just "aa",Just "aaa",Nothing]
