@@ -24,7 +24,6 @@ library
   exposed-modules:
     Circuit.Parser
     Circuit.Stream
-    Circuit.Parser.BranchingTraceProbe
     Circuit.Parser.Csv
     Circuit.Parser.Csv.Lexer
     Circuit.Parser.Examples
@@ -32,18 +31,11 @@ library
     Circuit.Parser.Json.Lexer
     Circuit.Parser.Json.Unescape
     Circuit.Parser.Json.Value
-    Circuit.Parser.LevelsT
     Circuit.Parser.Lexer
-    Circuit.Parser.Matrix
     Circuit.Parser.ProcessCompiler
-    Circuit.Parser.ProcessProbe
-    Circuit.Parser.Net
     Circuit.Parser.Primitives
-    Circuit.Parser.Semiring
-    Circuit.Parser.SemiringProbe
     Circuit.Parser.Syntax
     Circuit.Parser.Token
-    Circuit.Parser.WeightedDiffProcess
 
   build-depends:
     base >=4.20 && <5,
@@ -52,7 +44,6 @@ library
     containers >=0.8 && <0.9,
     deepseq >=1.5.1 && <1.6,
     harpie >=0.2 && <0.4,
-    logict >=0.8 && <0.9,
     circuits-stats >=0.1 && <0.2,
     mtl >=2.3 && <2.4,
     numhask >=0.14 && <0.15,
