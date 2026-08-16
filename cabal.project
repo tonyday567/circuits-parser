@@ -5,7 +5,7 @@ packages:
   ../numhask/numhask.cabal
   ../circuits-diff/circuits-diff.cabal
   ../harpie/harpie.cabal
-  ../process-stats/process-stats.cabal
+  ../circuits-stats/circuits-stats.cabal
   /Users/tonyday567/other/logict/logict.cabal
   /Users/tonyday567/other/aeson/aeson.cabal
   /Users/tonyday567/other/cassava/cassava.cabal

@@ -5,10 +5,10 @@
 --
 -- The semiring spike resolved the branching-trace gate algebraically, by
 -- summing over all paths through a cyclic choice graph ('SemiringProbe').  The
--- @process-stats@ package contains the same phenomenon from the coalgebra side:
+-- @circuits-stats@ package contains the same phenomenon from the coalgebra side:
 --
--- * 'Process.Stats.Trace' gives a lazy @Traced (,) Process@ instance.
--- * 'Process.Stats.Diff' gives reverse-mode AD through a Process scan via
+-- * 'Circuit.Stats.Trace' gives a lazy @Traced (,) Process@ instance.
+-- * 'Circuit.Stats.Diff' gives reverse-mode AD through a Process scan via
 --   'DiffProcess'.
 --
 -- This probe shows that a tiny parser can be written as a state machine, and
@@ -19,7 +19,7 @@
 --
 -- === Trace-divergence correspondence
 --
--- 'Process.Stats.Trace' diverges for strict numeric accumulators (moving
+-- 'Circuit.Stats.Trace' diverges for strict numeric accumulators (moving
 -- average) because the per-step fixed point @a_t = r * a_t + x_t@ has no lazy
 -- solution.  That is the same obstruction as the naive @Traced Either@ parser
 -- committing to the first successful branch: some feedbacks do not admit the
@@ -52,12 +52,12 @@ where
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
 import Circuit.Diff (Diff' (..))
-import Process.Stats (Process (..))
-import Process.Stats.Diff (DiffProcess (..), diffFold, diffScan)
+import Circuit.Stats (Process (..))
+import Circuit.Stats.Diff (DiffProcess (..), diffFold, diffScan)
 import Prelude
 
 -- $setup
--- >>> import Process.Stats (fold, scan)
+-- >>> import Circuit.Stats (fold, scan)
 
 -- ---------------------------------------------------------------------------
 -- Non-differentiable input tokens

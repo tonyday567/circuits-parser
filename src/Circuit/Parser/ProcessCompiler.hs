@@ -26,7 +26,7 @@
 --
 -- === doctests
 --
--- >>> import Process.Stats (scan, fold)
+-- >>> import Circuit.Stats (scan, fold)
 -- >>> import Circuit.Parser.Syntax (charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 --
@@ -71,12 +71,12 @@ import Data.These (These (..))
 import NumHask.Algebra.Additive qualified as Add
 import NumHask.Algebra.Multiplicative qualified as Mul
 import Circuit.Diff (Diff, Diff' (..))
-import Process.Stats (Process (..))
-import Process.Stats.Diff (DiffProcess (..))
+import Circuit.Stats (Process (..))
+import Circuit.Stats.Diff (DiffProcess (..))
 import Prelude
 
 -- $setup
--- >>> import Process.Stats (scan, fold)
+-- >>> import Circuit.Stats (scan, fold)
 -- >>> import Circuit.Parser.Syntax (ParserSyntax, charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 
