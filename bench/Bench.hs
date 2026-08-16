@@ -125,8 +125,7 @@ megaparsecTokenizer :: String -> [String]
 megaparsecTokenizer =
   either (error . M.errorBundlePretty) id
     . M.parse
-      ( catMaybes <$> M.many tokenOrSkip <* M.eof
-      )
+      (catMaybes <$> M.many tokenOrSkip <* M.eof)
       ""
   where
     tokenOrSkip = (Just <$> megaparsecWord) <|> (Nothing <$ M.satisfy isSeparator)
@@ -141,8 +140,7 @@ parsecTokenizer :: String -> [String]
 parsecTokenizer =
   either (error . show) id
     . P.parse
-      ( catMaybes <$> P.many tokenOrSkip <* P.eof
-      )
+      (catMaybes <$> P.many tokenOrSkip <* P.eof)
       ""
   where
     tokenOrSkip = (Just <$> parsecWord) P.<|> (Nothing <$ P.satisfy isSeparator)

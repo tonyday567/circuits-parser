@@ -209,7 +209,8 @@ textJson t = stringUtf8 "\"" <> byteString (encodeUtf8 (T.concatMap esc t)) <> s
       '\n' -> "\\n"
       '\r' -> "\\r"
       '\t' -> "\\t"
-      _ | ord c < 0x20 -> "\\u" <> pad (showHex (ord c) "")
+      _
+        | ord c < 0x20 -> "\\u" <> pad (showHex (ord c) "")
         | otherwise -> [c]
     pad h = replicate (4 - length h) '0' ++ h
 

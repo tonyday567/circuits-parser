@@ -159,7 +159,8 @@ encodeCases =
       -- tree roundtrips (structural)
       rt "scalar" (JBool False),
       rt "numbers" (JArray (V.fromList [num 10 0, num 1 1, num 150 (-2), num 15 (-4), num (-150) (-2), num 0 5])),
-      rt "nested with escapes"
+      rt
+        "nested with escapes"
         ( JObject
             [ ("msg", JString "line1\nline2 \"quoted\" \x3bb"),
               ("tags", JArray (V.fromList [JString "a", JNull])),
