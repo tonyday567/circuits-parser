@@ -18,9 +18,7 @@ module Circuit.Parser.Examples
   )
 where
 
-import Circuit.Channel (Traced)
 import Circuit.Parser
-import Control.Arrow (Kleisli (..))
 import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (StateT, runStateT)
 import Data.These (These (..))
@@ -28,7 +26,7 @@ import Data.These (These (..))
 -- | A parser that accepts "ab" or "a".
 --
 -- Defined once, runnable under any base monad.
-abOrA :: (Monad m, Uncons f Char, Traced Either (Kleisli m)) => Parser m f Char String
+abOrA :: (Monad m, Uncons f Char) => Parser m f Char String
 abOrA = string "ab" <|> string "a"
 
 -- | Megaparsec-style runner: stateful, error-aware.
