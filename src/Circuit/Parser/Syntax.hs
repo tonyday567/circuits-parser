@@ -77,6 +77,9 @@ module Circuit.Parser.Syntax
     runParserSyntax,
     runParserSyntaxIdentity,
 
+    -- * Runtime interop
+    loopToParser,
+
     -- * Static analysis
     FirstSet (..),
     firstSet,
@@ -108,6 +111,7 @@ import Circuit.Parser
     Uncons (..),
   )
 import Circuit.Parser qualified as PU
+import Circuit.Thread (Thread (..))
 import Control.Applicative (Alternative (empty, (<|>)), optional)
 import Control.Arrow (Kleisli (..))
 import Control.Monad (MonadPlus, void)
@@ -167,6 +171,12 @@ instance Category (Syntax (ParserSyntaxSig f s) (Kleisli Identity)) where
   id = Lift id
   f . g = Op (L (SigCompose f g))
 
+-- | View a @Thread@-based parser as a @Loop@ morphism (no trace feedback).
+-- The syntax interpreter still targets @Loop Either (Kleisli m)@; this adapts
+-- the runtime 'Parser' primitives to that target.
+parserToLoop :: (Monad m) => Parser m f s a -> C.Loop Either (Kleisli m) f (These a f)
+parserToLoop (Parser (Thread k)) = C.Lift $ Kleisli $ \f -> snd <$> runKleisli k (f, ())
+
 -- ---------------------------------------------------------------------------
 -- Algebra for execution
 -- ---------------------------------------------------------------------------
@@ -180,12 +190,12 @@ instance
   type
     Ctx (SigPrim f s) (Kleisli Identity) (C.Loop Either (Kleisli m)) =
       (Monad m, Uncons f s, Traced Either (Kleisli m))
-  alg _ _ PrimNext = unParser (PU.next @m @f @s)
-  alg _ _ (PrimSatisfy p) = unParser (PU.satisfy @m @f @s p)
-  alg _ _ (PrimChar c) = unParser (PU.char @m @f @s c)
-  alg _ _ (PrimString cs) = unParser (PU.string @m @f @s cs)
-  alg _ _ PrimEndOfInput = unParser (PU.endOfInput @m @f @s)
-  alg _ _ PrimTakeRest = unParser (PU.takeRest @m @f @s)
+  alg _ _ PrimNext = parserToLoop (PU.next @m @f @s)
+  alg _ _ (PrimSatisfy p) = parserToLoop (PU.satisfy @m @f @s p)
+  alg _ _ (PrimChar c) = parserToLoop (PU.char @m @f @s c)
+  alg _ _ (PrimString cs) = parserToLoop (PU.string @m @f @s cs)
+  alg _ _ PrimEndOfInput = parserToLoop (PU.endOfInput @m @f @s)
+  alg _ _ PrimTakeRest = parserToLoop (PU.takeRest @m @f @s)
 
 -- Helpers that live in the concrete 'Loop' world. They take a 'Proxy s' because
 -- the element type is phantom in the loop representation.
@@ -257,12 +267,31 @@ tryP p = C.Lift $ Kleisli $ \s -> do
     That _ -> That s
     result -> result
 
+-- | The stream leftover after a parse result: the new thread state.
+leftoverOf :: forall f s a. (Uncons f s) => These a f -> f
+leftoverOf (This _) = nil @f @s
+leftoverOf (That f) = f
+leftoverOf (These _ f) = f
+
+-- | View a @Loop@-based parser as a @Thread@-based 'Parser'.  The syntax
+-- interpreter and the machina probes that still express choice via
+-- 'Circuit.trace' use this to adapt to the runtime 'Parser'.
+loopToParser ::
+  forall m f s a.
+  (Monad m, Uncons f s, Traced Either (Kleisli m)) =>
+  C.Loop Either (Kleisli m) f (These a f) ->
+  Parser m f s a
+loopToParser loop = Parser $ Thread $ Kleisli $ \(f, ()) -> do
+  r <- runKleisli (C.run loop) f
+  pure (leftoverOf @f @s r, r)
+
 -- | Interpret syntax into a concrete parser.
 runParserSyntax ::
+  forall m f s a.
   (Monad m, Uncons f s, Traced Either (Kleisli m)) =>
   ParserSyntax f s a ->
   Parser m f s a
-runParserSyntax (ParserSyntax syn) = Parser $ evalInto emb syn
+runParserSyntax (ParserSyntax syn) = loopToParser (evalInto emb syn)
   where
     emb (Kleisli g) = C.Lift $ Kleisli $ \x -> pure (runIdentity (g x))
 
