@@ -61,6 +61,7 @@ import Data.Word (Word8)
 import Numeric (showHex)
 
 -- $setup
+-- >>> :set -XOverloadedStrings
 -- >>> import Data.ByteString.Char8 qualified as C
 -- >>> import Data.Vector qualified as V
 
