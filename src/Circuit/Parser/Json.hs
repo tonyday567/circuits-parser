@@ -165,7 +165,16 @@ decodeJson s = case runParserIdentity (value <* ws <* endOfInput) s of
 -- The other half of the boundary: 'decodeJson' and 'encodeJson' are exact
 -- tree inverses —
 --
--- prop> decodeJson (encodeJson j) == Right j
+-- > decodeJson (encodeJson j) == Right j
+--
+-- >>> decodeJson (encodeJson (JObject [("a", JArray (V.fromList [JNumber 1, JBool True, JNull]))]))
+-- Right (JObject [("a",JArray [JNumber 1.0,JBool True,JNull])])
+--
+-- >>> decodeJson (encodeJson (JString "a\nb"))
+-- Right (JString "a\nb")
+--
+-- >>> decodeJson (encodeJson (JObject []))
+-- Right (JObject [])
 --
 -- Numbers render in a form the parser reads back to the /same/
 -- 'Scientific' (its equality is structural): zero exponent renders the
