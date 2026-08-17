@@ -1,7 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PackageImports #-}
-{-# LANGUAGE TypeApplications #-}
 
 -- | Stream algebra and coalgebra for token streams.
 --
