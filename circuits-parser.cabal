@@ -13,7 +13,6 @@ maintainer: tonyday567@gmail.com
 category: parsing
 build-type: Simple
 tested-with: ghc ==9.14.1
-
 extra-doc-files: ChangeLog.md
 
 source-repository head
@@ -23,7 +22,6 @@ source-repository head
 library
   exposed-modules:
     Circuit.Parser
-    Circuit.Stream
     Circuit.Parser.Csv
     Circuit.Parser.Csv.Lexer
     Circuit.Parser.Examples
@@ -32,22 +30,23 @@ library
     Circuit.Parser.Json.Unescape
     Circuit.Parser.Json.Value
     Circuit.Parser.Lexer
-    Circuit.Parser.ProcessCompiler
     Circuit.Parser.Primitives
+    Circuit.Parser.ProcessCompiler
     Circuit.Parser.Syntax
     Circuit.Parser.Token
+    Circuit.Stream
 
   build-depends:
     base >=4.20 && <5,
     bytestring >=0.12.2 && <0.13,
     circuits >=0.3 && <0.5,
+    circuits-diff >=0.1 && <0.2,
+    circuits-stats >=0.1 && <0.2,
     containers >=0.8 && <0.9,
     deepseq >=1.5.1 && <1.6,
     harpie >=0.2 && <0.4,
-    circuits-stats >=0.1 && <0.2,
     mtl >=2.3 && <2.4,
     numhask >=0.14 && <0.15,
-    circuits-diff >=0.1 && <0.2,
     scientific >=0.3 && <0.4,
     text >=2.1.3 && <2.2,
     these >=1.2.1 && <1.3,
@@ -64,8 +63,8 @@ benchmark circuits-parser-bench
   main-is: Bench.hs
   hs-source-dirs: bench
   build-depends:
-    base >=4.20 && <5,
     attoparsec,
+    base >=4.20 && <5,
     bytestring >=0.12.2 && <0.13,
     circuits-parser,
     deepseq >=1.5.1 && <1.6,
@@ -87,10 +86,10 @@ executable circuits-parser-axioma
   main-is: axioma.hs
   hs-source-dirs: app
   build-depends:
-    base >=4.20 && <5,
     aeson >=2.3 && <2.4,
-    cassava >=0.5 && <0.7,
+    base >=4.20 && <5,
     bytestring >=0.12.2 && <0.13,
+    cassava >=0.5 && <0.7,
     circuits-parser,
     directory >=1.3 && <1.4,
     scientific >=0.3 && <0.4,
