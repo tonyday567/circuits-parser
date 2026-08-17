@@ -1,16 +1,3 @@
-packages:
-  circuits-parser.cabal
-  ../circuits/circuits.cabal
-  ../circuits-mat/circuits-mat.cabal
-  ../numhask/numhask.cabal
-  ../circuits-diff/circuits-diff.cabal
-  ../harpie/harpie.cabal
-  ../circuits-stats/circuits-stats.cabal
-  /Users/tonyday567/other/aeson/aeson.cabal
-  /Users/tonyday567/other/cassava/cassava.cabal
-  /Users/tonyday567/other/attoparsec/attoparsec.cabal
-  /Users/tonyday567/other/flatparse/flatparse.cabal
-  /Users/tonyday567/other/megaparsec/megaparsec.cabal
-  /Users/tonyday567/other/parsec/parsec.cabal
+packages: circuits-parser.cabal
 
 write-ghc-environment-files: always
