@@ -21,7 +21,6 @@ where
 import Circuit.Parser
 import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (StateT, runStateT)
-import Data.These (These (..))
 
 -- | A parser that accepts "ab" or "a".
 --

@@ -1,6 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PackageImports #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | Stream algebra and coalgebra for token streams.
 --

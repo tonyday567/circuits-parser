@@ -263,7 +263,7 @@ instance (Monad m, Uncons f s) => Applicative (Parser m f s) where
             That _ -> pure (s, That s)
             _ -> pure (s2, first g r2)
      in do
-          (s1, r1) <- runKleisli (runThread pf) (s, ())
+          (_, r1) <- runKleisli (runThread pf) (s, ())
           case r1 of
             That _ -> pure (s, That s)
             This g -> app g (nil @f @s)
