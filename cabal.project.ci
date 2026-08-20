@@ -1,8 +1,6 @@
 packages:
   circuits-parser.cabal
 
-write-ghc-environment-files: always
-
 source-repository-package
   type: git
   location: https://github.com/tonyday567/circuits.git
@@ -32,3 +30,5 @@ source-repository-package
   type: git
   location: https://github.com/tonyday567/numhask.git
   tag: main
+
+write-ghc-environment-files: always
