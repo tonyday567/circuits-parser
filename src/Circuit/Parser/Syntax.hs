@@ -98,6 +98,8 @@ module Circuit.Parser.Syntax
   )
 where
 
+import Circuit.Body (Body (..), SArr (..))
+import Circuit.Category (Category (..))
 import Circuit.Fragment
   ( Algebra (..),
     SigCompose (..),
@@ -105,10 +107,8 @@ import Circuit.Fragment
     evalInto,
     (:+:) (..),
   )
-import Circuit.Category (Category (..))
 import Circuit.Parser (Parser (..), Uncons (..))
 import Circuit.Parser qualified as PU
-import Circuit.Body (SArr (..), Body (..))
 import Control.Applicative (Alternative (empty, (<|>)), optional)
 import Control.Arrow (Kleisli (..))
 import Control.Monad (MonadPlus, void)

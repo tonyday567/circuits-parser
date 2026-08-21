@@ -127,8 +127,8 @@ module Circuit.Parser
   )
 where
 
-import Circuit.Parser.Stream (These (..), Uncons (..))
 import Circuit.Body (Body (..))
+import Circuit.Parser.Stream (These (..), Uncons (..))
 import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Arrow (Kleisli (..))
 import Control.Monad (MonadPlus, void)
