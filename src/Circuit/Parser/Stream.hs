@@ -1,13 +1,12 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE PackageImports #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | Stream algebra and coalgebra for token streams.
 --
 -- This module re-exports the neutral stream interface from @circuits@ and
 -- supplies the concrete instances for lists, 'ByteString', and 'Text'.
-module Circuit.Stream
+module Circuit.Parser.Stream
   ( -- * Boundary result
     These (..),
 
@@ -22,12 +21,12 @@ module Circuit.Stream
   )
 where
 
+import Circuit.Stream (Cons (..), Snoc (..), These (..), Uncons (..))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word8)
-import "circuits" Circuit.Stream (Cons (..), Snoc (..), These (..), Uncons (..))
 
 -- | Strict 'ByteString' as a stream of 'Char'.
 --

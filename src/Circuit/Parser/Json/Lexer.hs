@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Fast imperative JSON tokenizer over strict 'ByteString'.
@@ -17,12 +16,10 @@ module Circuit.Parser.Json.Lexer
   )
 where
 
-import Control.DeepSeq (NFData)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Unsafe qualified as BSU
 import Data.Word (Word8)
-import GHC.Generics (Generic)
 
 -- $setup
 -- >>> import Data.ByteString.Char8 qualified as C
@@ -41,9 +38,7 @@ data JsonToken
   | TTrue
   | TFalse
   | TNull
-  deriving (Eq, Show, Generic)
-
-instance NFData JsonToken
+  deriving (Eq, Show)
 
 -- | Tokenize a strict 'ByteString'.
 --

@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Unified parser over @Thread (,) (Kleisli m)@, with the stream as ambient
+-- | Unified parser over @Body (,) (Kleisli m)@, with the stream as ambient
 -- state.
 --
 -- The stream @f@ is carried as the explicit thread state; the parser takes no
@@ -127,8 +127,8 @@ module Circuit.Parser
   )
 where
 
-import Circuit.Stream (These (..), Uncons (..))
-import Circuit.Thread (Thread (..))
+import Circuit.Parser.Stream (These (..), Uncons (..))
+import Circuit.Body (Body (..))
 import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Arrow (Kleisli (..))
 import Control.Monad (MonadPlus, void)
@@ -146,10 +146,10 @@ import Prelude hiding (span)
 -- >>> import Data.Functor.Identity (Identity)
 -- >>> import Data.These (These (..))
 
--- | Parser syntax: a @Thread (,)@ morphism in @Kleisli m@ with the stream @f@
+-- | Parser syntax: a @Body (,)@ morphism in @Kleisli m@ with the stream @f@
 -- as ambient state, unit input, and @These a f@ output.
 newtype Parser m f s a = Parser
-  { unParser :: Thread (,) (Kleisli m) f () (These a f)
+  { unParser :: Body (,) (Kleisli m) f () (These a f)
   }
 
 -- | The stream leftover after a parse result: the new thread state.
@@ -160,7 +160,7 @@ leftoverOf (These _ f) = f
 
 -- | Run a parser in the base monad, returning the raw 'These' result.
 runParser :: forall m f s a. (Monad m) => Parser m f s a -> f -> m (These a f)
-runParser p f = snd <$> runKleisli (runThread (unParser p)) (f, ())
+runParser p f = snd <$> runKleisli (runBody (unParser p)) (f, ())
 
 -- | Run a pure parser.
 runParserIdentity :: Parser Identity f s a -> f -> These a f
@@ -194,7 +194,7 @@ asEither (That f) = Left f
 
 -- | Consume and return the next element, or 'That' if the stream is empty.
 next :: forall m f s. (Monad m, Uncons f s) => Parser m f s s
-next = Parser $ Thread $ Kleisli $ \(f, ()) ->
+next = Parser $ Body $ Kleisli $ \(f, ()) ->
   let r = uncons @f @s f
    in pure (leftoverOf @f @s r, r)
 
@@ -212,7 +212,7 @@ guardThese p def =
 
 -- | Consume one element if it satisfies the predicate.
 satisfy :: forall m f s. (Monad m, Uncons f s) => (s -> Bool) -> Parser m f s s
-satisfy p = Parser $ Thread $ Kleisli $ \(f, ()) ->
+satisfy p = Parser $ Body $ Kleisli $ \(f, ()) ->
   let r = guardThese p f (uncons @f @s f)
    in pure (leftoverOf @f @s r, r)
 
@@ -227,8 +227,8 @@ guardResult p def =
 
 -- | Keep only successes matching the predicate.
 filterP :: forall m f s a. (Monad m, Uncons f s) => Parser m f s a -> (a -> Bool) -> Parser m f s a
-filterP (Parser p) f = Parser $ Thread $ Kleisli $ \(s, ()) -> do
-  (_, r) <- runKleisli (runThread p) (s, ())
+filterP (Parser p) f = Parser $ Body $ Kleisli $ \(s, ()) -> do
+  (_, r) <- runKleisli (runBody p) (s, ())
   let r' = guardResult f s r
   pure (leftoverOf @f @s r', r')
 
@@ -242,48 +242,48 @@ string = traverse char
 
 -- | Succeed only at the end of input.
 endOfInput :: forall m f s. (Monad m, Uncons f s) => Parser m f s ()
-endOfInput = Parser $ Thread $ Kleisli $ \(f, ()) ->
+endOfInput = Parser $ Body $ Kleisli $ \(f, ()) ->
   let r = case uncons @f @s f of
         That _ -> These () f
         _ -> That f
    in pure (leftoverOf @f @s r, r)
 
 instance (Monad m) => Functor (Parser m f s) where
-  fmap g (Parser p) = Parser $ Thread $ Kleisli $ \(f, ()) -> do
-    (f', r) <- runKleisli (runThread p) (f, ())
+  fmap g (Parser p) = Parser $ Body $ Kleisli $ \(f, ()) -> do
+    (f', r) <- runKleisli (runBody p) (f, ())
     pure (f', first g r)
 
 instance (Monad m, Uncons f s) => Applicative (Parser m f s) where
-  pure a = Parser $ Thread $ Kleisli $ \(f, ()) -> pure (f, These a f)
+  pure a = Parser $ Body $ Kleisli $ \(f, ()) -> pure (f, These a f)
 
-  Parser pf <*> Parser pa = Parser $ Thread $ Kleisli $ \(s, ()) ->
+  Parser pf <*> Parser pa = Parser $ Body $ Kleisli $ \(s, ()) ->
     let app g s' = do
-          (s2, r2) <- runKleisli (runThread pa) (s', ())
+          (s2, r2) <- runKleisli (runBody pa) (s', ())
           case r2 of
             That _ -> pure (s, That s)
             _ -> pure (s2, first g r2)
      in do
-          (_, r1) <- runKleisli (runThread pf) (s, ())
+          (_, r1) <- runKleisli (runBody pf) (s, ())
           case r1 of
             That _ -> pure (s, That s)
             This g -> app g (nil @f @s)
             These g s1' -> app g s1'
 
 instance (Monad m, Uncons f s) => Monad (Parser m f s) where
-  Parser m >>= k = Parser $ Thread $ Kleisli $ \(s, ()) -> do
-    (s1, r1) <- runKleisli (runThread m) (s, ())
+  Parser m >>= k = Parser $ Body $ Kleisli $ \(s, ()) -> do
+    (s1, r1) <- runKleisli (runBody m) (s, ())
     case r1 of
       That _ -> pure (s1, That s1)
-      This a -> runKleisli (runThread (unParser (k a))) (nil @f @s, ())
-      These a s1' -> runKleisli (runThread (unParser (k a))) (s1', ())
+      This a -> runKleisli (runBody (unParser (k a))) (nil @f @s, ())
+      These a s1' -> runKleisli (runBody (unParser (k a))) (s1', ())
 
 instance (Monad m, Uncons f s) => Alternative (Parser m f s) where
-  empty = Parser $ Thread $ Kleisli $ \(f, ()) -> pure (f, That f)
+  empty = Parser $ Body $ Kleisli $ \(f, ()) -> pure (f, That f)
 
-  Parser p1 <|> Parser p2 = Parser $ Thread $ Kleisli $ \(s, ()) -> do
-    (s1, r1) <- runKleisli (runThread p1) (s, ())
+  Parser p1 <|> Parser p2 = Parser $ Body $ Kleisli $ \(s, ()) -> do
+    (s1, r1) <- runKleisli (runBody p1) (s, ())
     case r1 of
-      That _ -> runKleisli (runThread p2) (s1, ())
+      That _ -> runKleisli (runBody p2) (s1, ())
       _ -> pure (s1, r1)
 
 instance (Monad m, Uncons f s) => MonadPlus (Parser m f s)
@@ -306,7 +306,7 @@ skipWhile p = void (many (satisfy p))
 
 -- | Consume all remaining input as the value.
 takeRest :: forall m f s. (Monad m, Uncons f s) => Parser m f s f
-takeRest = Parser $ Thread $ Kleisli $ \(s, ()) ->
+takeRest = Parser $ Body $ Kleisli $ \(s, ()) ->
   let r = These s (nil @f @s)
    in pure (leftoverOf @f @s r, r)
 
@@ -349,8 +349,8 @@ chainr f p z = go
 -- partially-consumed stream. Wrap the composite in 'try' when that is
 -- possible.
 try :: forall m f s a. (Monad m, Uncons f s) => Parser m f s a -> Parser m f s a
-try (Parser p) = Parser $ Thread $ Kleisli $ \(s, ()) -> do
-  (_, r) <- runKleisli (runThread p) (s, ())
+try (Parser p) = Parser $ Body $ Kleisli $ \(s, ()) -> do
+  (_, r) <- runKleisli (runBody p) (s, ())
   pure $ case r of
     That _ -> (s, That s)
     result -> (leftoverOf @f @s result, result)
@@ -369,8 +369,8 @@ lineEnd = char '\n' <|> (endOfInput $> ' ')
 -- remainder and 'B.take' a prefix of the original (cheap for strict
 -- 'ByteString').
 capturedBS :: forall m a. (Monad m) => Parser m ByteString Char a -> Parser m ByteString Char (ByteString, a)
-capturedBS (Parser p) = Parser $ Thread $ Kleisli $ \(s, ()) -> do
-  (_, r) <- runKleisli (runThread p) (s, ())
+capturedBS (Parser p) = Parser $ Body $ Kleisli $ \(s, ()) -> do
+  (_, r) <- runKleisli (runBody p) (s, ())
   pure $ case r of
     That _ -> (s, That s)
     This a -> (B.empty, These (s, a) B.empty)
@@ -384,7 +384,7 @@ bs p = fst <$> capturedBS p
 -- The result is the list of captured elements; for zero-copy capture of a
 -- 'ByteString' span, prefer 'bs' with 'skipWhile'.
 span :: forall m f s. (Monad m, Uncons f s) => (s -> Bool) -> Parser m f s [s]
-span p = Parser $ Thread $ Kleisli $ \(s, ()) ->
+span p = Parser $ Body $ Kleisli $ \(s, ()) ->
   let r = go [] s
    in pure (leftoverOf @f @s r, r)
   where
@@ -400,7 +400,7 @@ span p = Parser $ Thread $ Kleisli $ \(s, ()) ->
 -- | Capture a non-empty span of elements satisfying the predicate. Fails if
 -- the next element does not satisfy the predicate.
 span1 :: forall m f s. (Monad m, Uncons f s) => (s -> Bool) -> Parser m f s [s]
-span1 p = Parser $ Thread $ Kleisli $ \(s, ()) ->
+span1 p = Parser $ Body $ Kleisli $ \(s, ()) ->
   let r = case uncons @f @s s of
         That _ -> That s
         This x
@@ -423,7 +423,7 @@ span1 p = Parser $ Thread $ Kleisli $ \(s, ()) ->
 -- | Return the next element without consuming the stream. Fails at end of
 -- input.
 peek :: forall m f s. (Monad m, Uncons f s) => Parser m f s s
-peek = Parser $ Thread $ Kleisli $ \(s, ()) ->
+peek = Parser $ Body $ Kleisli $ \(s, ()) ->
   let r = case uncons @f @s s of
         That _ -> That s
         This x -> These x s

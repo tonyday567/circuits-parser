@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-
 -- | The JSON tree.
 --
 -- One type, six constructors, no policy. Duplicate object keys are preserved
@@ -10,11 +8,9 @@ module Circuit.Parser.Json.Value
   )
 where
 
-import Control.DeepSeq (NFData)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
 import Data.Vector (Vector)
-import GHC.Generics (Generic)
 
 -- | A JSON value.
 --
@@ -28,6 +24,4 @@ data Json
   | JString !Text
   | JArray (Vector Json)
   | JObject [(Text, Json)]
-  deriving (Eq, Show, Generic)
-
-instance NFData Json
+  deriving (Eq, Show)

@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-
 -- | CSV for the circuits ecosystem: RFC 4180 on "Circuit.Parser" combinators.
 --
 -- Where "Circuit.Parser.Json" skips whitespace, csv skips nothing — spaces
@@ -29,7 +27,6 @@ module Circuit.Parser.Csv
 where
 
 import Circuit.Parser
-import Control.DeepSeq (NFData)
 import Control.Monad (void)
 import Data.ByteString (ByteString)
 import Data.Functor (($>))
@@ -39,7 +36,6 @@ import Data.Text qualified as T
 import Data.Text.Encoding (decodeUtf8')
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import GHC.Generics (Generic)
 
 -- $setup
 -- >>> import Data.ByteString.Char8 qualified as C
@@ -47,9 +43,7 @@ import GHC.Generics (Generic)
 -- | A CSV table: rows of fields, source order. No header policy — headers
 -- are a consumer convention, not a parsing fact.
 newtype Csv = Csv (Vector (Vector Text))
-  deriving (Eq, Show, Generic)
-
-instance NFData Csv
+  deriving (Eq, Show)
 
 -- | Parse a whole CSV table.
 csv :: Parser Identity ByteString Char Csv

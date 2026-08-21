@@ -13,3 +13,5 @@
 - Readme error-path signpost: combinator failures are flat; positioned errors
   belong in the lexer layer or a different base monad.
 - Added `Circuit.Parser.Json*` and `Circuit.Parser.Csv*` dialects.
+- Renamed `Circuit.Stream` to `Circuit.Parser.Stream` to avoid the module-name
+  clash with `circuits` and eliminate `PackageImports`.

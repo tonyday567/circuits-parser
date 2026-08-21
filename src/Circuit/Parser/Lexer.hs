@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -Wno-x-partial #-}
 
 -- | Fast imperative lexers over "ByteString".
@@ -37,12 +36,10 @@ module Circuit.Parser.Lexer
   )
 where
 
-import Control.DeepSeq (NFData)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Unsafe qualified as BSU
 import Data.Word (Word8)
-import GHC.Generics (Generic)
 import Prelude hiding (id, (.))
 import Prelude qualified as P
 
@@ -113,9 +110,7 @@ data MarkupCtx
   | InAttrVal Char
   | InClose
   | InComment
-  deriving (Eq, Show, Generic)
-
-instance NFData MarkupCtx
+  deriving (Eq, Show)
 
 -- | Markup token. ByteString fields are zero-copy slices of the input.
 data MarkupToken
@@ -127,9 +122,7 @@ data MarkupToken
   | TAttrName ByteString
   | TAttrVal ByteString
   | TComment ByteString
-  deriving (Eq, Show, Generic)
-
-instance NFData MarkupToken
+  deriving (Eq, Show)
 
 data ByteClass
   = BLt
