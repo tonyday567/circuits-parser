@@ -26,14 +26,11 @@ where
 
 import Circuit.Parser (Parser, These (..), Uncons (..), char, runParserIdentity, satisfy, some, (<|>))
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
-import Data.Foldable (toList)
 import Data.Functor.Identity (Identity)
 import Data.IntMap.Strict qualified as IntMap
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Harpie.Array (Array)
-import Harpie.Array qualified as A
 
 -- ============================================================================
 -- Token Patterns
@@ -67,14 +64,12 @@ token = word <|> number <|> fmap (: []) punctuation
 -- Core Tokenizer
 -- ============================================================================
 
--- | Tokenize text into an array of tokens using Circuit.Parser patterns
-tokenize :: Text -> Array Text
+-- | Tokenize text into a list of tokens using Circuit.Parser patterns.
+tokenize :: Text -> [Text]
 tokenize input =
   let str = Text.unpack input
       tokens = tokenizeLoop str []
-   in if null tokens
-        then A.array [0] []
-        else A.array [length tokens] (map Text.pack tokens)
+   in map Text.pack tokens
 
 -- | Recursively extract tokens using runParser
 tokenizeLoop :: String -> [String] -> [String]
@@ -104,10 +99,9 @@ data Vocabulary = Vocabulary
   }
   deriving (Eq, Show)
 
-buildVocabulary :: Array Text -> Vocabulary
+buildVocabulary :: [Text] -> Vocabulary
 buildVocabulary tokens =
-  let tokenList = toList tokens
-      (fwd, rev, finalIdx) = foldl' insertUnique (Map.empty, IntMap.empty, 0) tokenList
+  let (fwd, rev, finalIdx) = foldl' insertUnique (Map.empty, IntMap.empty, 0) tokens
    in Vocabulary fwd rev finalIdx
   where
     insertUnique (fwd, rev, idx) tok =

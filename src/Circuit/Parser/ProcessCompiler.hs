@@ -19,7 +19,7 @@
 --
 -- === doctests
 --
--- >>> import Circuit.Stats (scan, fold)
+-- >>> import Circuit.Process (scan, fold)
 -- >>> import Circuit.Parser.Syntax (charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 --
@@ -40,13 +40,13 @@ where
 
 import Circuit.Parser (Uncons (..))
 import Circuit.Parser.Syntax (ParserSyntax, derive, nullableValue)
-import Circuit.Stats (Process (..))
+import Circuit.Process (Process (..))
 import Data.Proxy (Proxy (..))
 import Data.These (These (..))
 import Prelude
 
 -- $setup
--- >>> import Circuit.Stats (scan, fold)
+-- >>> import Circuit.Process (scan, fold)
 -- >>> import Circuit.Parser.Syntax (ParserSyntax, charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 

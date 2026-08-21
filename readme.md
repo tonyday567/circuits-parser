@@ -133,7 +133,7 @@ package does not ship them.
 
 `Circuit.Parser.Primitives` — numeric parsers (`digit`, `int`, `double`, `signed`) and UTF-8 conversions.
 
-`Circuit.Parser.Token` — word/number/punctuation tokenisers and vocabulary building over `Harpie.Array`.
+`Circuit.Parser.Token` — word/number/punctuation tokenisers and vocabulary building over `[Text]`.
 
 `Circuit.Parser.Lexer` — fast imperative `ByteString` lexers (zero-copy slices), complementary to the combinator path: they trade compositionality for raw speed, and the markup lexer doubles as a state machine that morphs into a `Circuit` when composition is needed.
 
