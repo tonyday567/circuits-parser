@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Unified parser over @Body (,) (K m)@, with the stream as ambient
+-- | Unified parser over @Body (,) f (K m)@, with the stream @f@ as ambient
 -- state.
 --
 -- The stream @f@ is carried as the explicit thread state; the parser takes no
@@ -146,10 +146,10 @@ import Prelude hiding (span)
 -- >>> import Data.Functor.Identity (Identity)
 -- >>> import Data.These (These (..))
 
--- | Parser syntax: a @Body (,)@ morphism in @K m@ with the stream @f@
+-- | Parser syntax: a @Body (,) f (K m)@ morphism with the stream @f@
 -- as ambient state, unit input, and @These a f@ output.
 newtype Parser m f s a = Parser
-  { unParser :: Body (,) (K m) f () (These a f)
+  { unParser :: Body (,) f (K m) () (These a f)
   }
 
 -- | The stream leftover after a parse result: the new thread state.
@@ -160,7 +160,7 @@ leftoverOf (These _ f) = f
 
 -- | Run a parser in the base monad, returning the raw 'These' result.
 runParser :: forall m f s a. (Monad m) => Parser m f s a -> f -> m (These a f)
-runParser p f = snd <$> runK (runBody (unParser p)) (f, ())
+runParser p f = snd <$> runK (morphism (unParser p)) (f, ())
 
 -- | Run a pure parser.
 runParserIdentity :: Parser Identity f s a -> f -> These a f
@@ -228,7 +228,7 @@ guardResult p def =
 -- | Keep only successes matching the predicate.
 filterP :: forall m f s a. (Monad m, Uncons f s) => Parser m f s a -> (a -> Bool) -> Parser m f s a
 filterP (Parser p) f = Parser $ Body $ K $ \(s, ()) -> do
-  (_, r) <- runK (runBody p) (s, ())
+  (_, r) <- runK (morphism p) (s, ())
   let r' = guardResult f s r
   pure (leftoverOf @f @s r', r')
 
@@ -250,7 +250,7 @@ endOfInput = Parser $ Body $ K $ \(f, ()) ->
 
 instance (Monad m) => Functor (Parser m f s) where
   fmap g (Parser p) = Parser $ Body $ K $ \(f, ()) -> do
-    (f', r) <- runK (runBody p) (f, ())
+    (f', r) <- runK (morphism p) (f, ())
     pure (f', first g r)
 
 instance (Monad m, Uncons f s) => Applicative (Parser m f s) where
@@ -258,12 +258,12 @@ instance (Monad m, Uncons f s) => Applicative (Parser m f s) where
 
   Parser pf <*> Parser pa = Parser $ Body $ K $ \(s, ()) ->
     let app g s' = do
-          (s2, r2) <- runK (runBody pa) (s', ())
+          (s2, r2) <- runK (morphism pa) (s', ())
           case r2 of
             That _ -> pure (s, That s)
             _ -> pure (s2, first g r2)
      in do
-          (_, r1) <- runK (runBody pf) (s, ())
+          (_, r1) <- runK (morphism pf) (s, ())
           case r1 of
             That _ -> pure (s, That s)
             This g -> app g (nil @f @s)
@@ -271,19 +271,19 @@ instance (Monad m, Uncons f s) => Applicative (Parser m f s) where
 
 instance (Monad m, Uncons f s) => Monad (Parser m f s) where
   Parser m >>= k = Parser $ Body $ K $ \(s, ()) -> do
-    (s1, r1) <- runK (runBody m) (s, ())
+    (s1, r1) <- runK (morphism m) (s, ())
     case r1 of
       That _ -> pure (s1, That s1)
-      This a -> runK (runBody (unParser (k a))) (nil @f @s, ())
-      These a s1' -> runK (runBody (unParser (k a))) (s1', ())
+      This a -> runK (morphism (unParser (k a))) (nil @f @s, ())
+      These a s1' -> runK (morphism (unParser (k a))) (s1', ())
 
 instance (Monad m, Uncons f s) => Alternative (Parser m f s) where
   empty = Parser $ Body $ K $ \(f, ()) -> pure (f, That f)
 
   Parser p1 <|> Parser p2 = Parser $ Body $ K $ \(s, ()) -> do
-    (s1, r1) <- runK (runBody p1) (s, ())
+    (s1, r1) <- runK (morphism p1) (s, ())
     case r1 of
-      That _ -> runK (runBody p2) (s1, ())
+      That _ -> runK (morphism p2) (s1, ())
       _ -> pure (s1, r1)
 
 instance (Monad m, Uncons f s) => MonadPlus (Parser m f s)
@@ -350,7 +350,7 @@ chainr f p z = go
 -- possible.
 try :: forall m f s a. (Monad m, Uncons f s) => Parser m f s a -> Parser m f s a
 try (Parser p) = Parser $ Body $ K $ \(s, ()) -> do
-  (_, r) <- runK (runBody p) (s, ())
+  (_, r) <- runK (morphism p) (s, ())
   pure $ case r of
     That _ -> (s, That s)
     result -> (leftoverOf @f @s result, result)
@@ -370,7 +370,7 @@ lineEnd = char '\n' <|> (endOfInput $> ' ')
 -- 'ByteString').
 capturedBS :: forall m a. (Monad m) => Parser m ByteString Char a -> Parser m ByteString Char (ByteString, a)
 capturedBS (Parser p) = Parser $ Body $ K $ \(s, ()) -> do
-  (_, r) <- runK (runBody p) (s, ())
+  (_, r) <- runK (morphism p) (s, ())
   pure $ case r of
     That _ -> (s, That s)
     This a -> (B.empty, These (s, a) B.empty)
