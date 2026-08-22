@@ -11,7 +11,7 @@
 -- | Reifiable parser syntax.
 --
 -- The parser type in "Circuit.Parser" hides primitive operations inside
--- @Kleisli m@ closures over a @Body (,) (Kleisli m) f@ base. This module
+-- @K m@ closures over a @Body (,) (K m) f@ base. This module
 -- exposes those primitives as constructors in a syntax tree, so the same
 -- parser can be executed /and/ analyzed.
 --
@@ -23,7 +23,7 @@
 -- @Loop Either@ here — the knot-body category @Body@ is the fold target,
 -- and the stream is never hidden in a feedback channel.
 --
--- Executing a syntax tree is an algebra fold into @Body (,) (Kleisli m) f@;
+-- Executing a syntax tree is an algebra fold into @Body (,) (K m) f@;
 -- static analysis is a fold into other targets ('FirstSet', 'Regex', the
 -- Brzozowski derivative).
 --
@@ -99,7 +99,7 @@ module Circuit.Parser.Syntax
 where
 
 import Circuit.Body (Body (..), SArr (..))
-import Circuit.Category (Category (..))
+import Circuit.Category (Category (..), K (..))
 import Circuit.Fragment
   ( Algebra (..),
     SigCompose (..),
@@ -110,7 +110,6 @@ import Circuit.Fragment
 import Circuit.Parser (Parser (..), Uncons (..))
 import Circuit.Parser qualified as PU
 import Control.Applicative (Alternative (empty, (<|>)), optional)
-import Control.Arrow (Kleisli (..))
 import Control.Monad (MonadPlus, void)
 import Data.Kind (Type)
 import Data.These (These (..))
@@ -171,13 +170,13 @@ instance Category (Syntax (ParserSyntaxSig f s) (SArr f)) where
 -- ---------------------------------------------------------------------------
 
 -- | Map primitive operations to their implementations in
--- @Body (,) (Kleisli m) f@.
+-- @Body (,) (K m) f@.
 instance
   (Monad m, Uncons f s) =>
-  Algebra (SigPrim f s) (SArr f) (Body (,) (Kleisli m) f)
+  Algebra (SigPrim f s) (SArr f) (Body (,) (K m) f)
   where
   type
-    Ctx (SigPrim f s) (SArr f) (Body (,) (Kleisli m) f) =
+    Ctx (SigPrim f s) (SArr f) (Body (,) (K m) f) =
       (Monad m, Uncons f s)
   alg _ _ PrimNext = unParser (PU.next @m @f @s)
   alg _ _ (PrimSatisfy p) = unParser (PU.satisfy @m @f @s p)
@@ -188,10 +187,10 @@ instance
 
 instance
   (Monad m, Uncons f s) =>
-  Algebra (SigComb f s) (SArr f) (Body (,) (Kleisli m) f)
+  Algebra (SigComb f s) (SArr f) (Body (,) (K m) f)
   where
   type
-    Ctx (SigComb f s) (SArr f) (Body (,) (Kleisli m) f) =
+    Ctx (SigComb f s) (SArr f) (Body (,) (K m) f) =
       (Monad m, Uncons f s)
   alg _ rec (CombAp pf pa) = unParser (Parser @m @f @s (rec pf) <*> Parser @m @f @s (rec pa))
   alg _ rec (CombBind p k) = unParser (Parser @m @f @s (rec p) >>= \a -> Parser @m @f @s (rec (k a)))
@@ -208,8 +207,8 @@ runParserSyntax ::
   Parser m f s a
 runParserSyntax (ParserSyntax syn) = Parser (evalInto emb syn)
   where
-    emb :: forall x y. SArr f x y -> Body (,) (Kleisli m) f x y
-    emb (SArr g) = Body $ Kleisli (pure . g)
+    emb :: forall x y. SArr f x y -> Body (,) (K m) f x y
+    emb (SArr g) = Body $ K (pure . g)
 
 -- | Interpret syntax into an identity parser.
 runParserSyntaxIdentity ::
