@@ -16,7 +16,7 @@
 -- parser can be executed /and/ analyzed.
 --
 -- The plumbing — sequential composition and the structural combinators — is
--- the free category over the pure ambient-state arrow @SArr f@
+-- the free category over the pure ambient-state arrow @Body (,) (->) f@
 -- (@Body (,) (->) f@), extended with 'SigPrim' and 'SigComb' signatures.
 -- The stream @f@ is ambient state throughout: primitives consume it, and
 -- choice is a structural combinator, not a trace. There is no 'SigKnot' /
@@ -98,7 +98,7 @@ module Circuit.Parser.Syntax
   )
 where
 
-import Circuit.Body (Body (..), SArr (..))
+import Circuit.Body (Body (..))
 import Circuit.Category (Category (..), K (..))
 import Circuit.Fragment
   ( Algebra (..),
@@ -153,15 +153,15 @@ data SigComb (f :: Type) (s :: Type) (arr :: Type -> Type -> Type) (rec :: Type 
 type ParserSyntaxSig f s = SigCompose :+: SigPrim f s :+: SigComb f s
 
 -- | A parser syntax tree with stream type @f@, element type @s@, and result
--- type @a@. The stream is ambient state (@SArr f@ base arrow), the source
+-- type @a@. The stream is ambient state (@Body (,) (->) f@ base arrow), the source
 -- object is unit, and the target carries the result plus leftover stream.
 newtype ParserSyntax (f :: Type) (s :: Type) (a :: Type) = ParserSyntax
   { unParserSyntax ::
-      Syntax (ParserSyntaxSig f s) (SArr f) () (These a f)
+      Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These a f)
   }
 
 -- | The underlying syntax type supports sequential composition via 'SigCompose'.
-instance Category (Syntax (ParserSyntaxSig f s) (SArr f)) where
+instance Category (Syntax (ParserSyntaxSig f s) (Body (,) (->) f)) where
   id = Lift id
   f . g = Op (L (SigCompose f g))
 
@@ -173,10 +173,10 @@ instance Category (Syntax (ParserSyntaxSig f s) (SArr f)) where
 -- @Body (,) (K m) f@.
 instance
   (Monad m, Uncons f s) =>
-  Algebra (SigPrim f s) (SArr f) (Body (,) (K m) f)
+  Algebra (SigPrim f s) (Body (,) (->) f) (Body (,) (K m) f)
   where
   type
-    Ctx (SigPrim f s) (SArr f) (Body (,) (K m) f) =
+    Ctx (SigPrim f s) (Body (,) (->) f) (Body (,) (K m) f) =
       (Monad m, Uncons f s)
   alg _ _ PrimNext = unParser (PU.next @m @f @s)
   alg _ _ (PrimSatisfy p) = unParser (PU.satisfy @m @f @s p)
@@ -187,10 +187,10 @@ instance
 
 instance
   (Monad m, Uncons f s) =>
-  Algebra (SigComb f s) (SArr f) (Body (,) (K m) f)
+  Algebra (SigComb f s) (Body (,) (->) f) (Body (,) (K m) f)
   where
   type
-    Ctx (SigComb f s) (SArr f) (Body (,) (K m) f) =
+    Ctx (SigComb f s) (Body (,) (->) f) (Body (,) (K m) f) =
       (Monad m, Uncons f s)
   alg _ rec (CombAp pf pa) = unParser (Parser @m @f @s (rec pf) <*> Parser @m @f @s (rec pa))
   alg _ rec (CombBind p k) = unParser (Parser @m @f @s (rec p) >>= \a -> Parser @m @f @s (rec (k a)))
@@ -207,8 +207,8 @@ runParserSyntax ::
   Parser m f s a
 runParserSyntax (ParserSyntax syn) = Parser (evalInto emb syn)
   where
-    emb :: forall x y. SArr f x y -> Body (,) (K m) f x y
-    emb (SArr g) = Body $ K (pure . g)
+    emb :: forall x y. Body (,) (->) f x y -> Body (,) (K m) f x y
+    emb (Body g) = Body $ K (pure . g)
 
 -- | Interpret syntax into an identity parser.
 runParserSyntaxIdentity ::
@@ -227,7 +227,7 @@ instance (Uncons f s) => Functor (ParserSyntax f s) where
     ParserSyntax (Op (R (R (CombFmap g p))))
 
 instance (Uncons f s) => Applicative (ParserSyntax f s) where
-  pure a = ParserSyntax $ Lift $ SArr $ \(st, ()) -> (st, These a st)
+  pure a = ParserSyntax $ Lift $ Body $ \(st, ()) -> (st, These a st)
   ParserSyntax pf <*> ParserSyntax pa =
     ParserSyntax $ Op $ R $ R $ CombAp pf pa
 
@@ -240,7 +240,7 @@ instance (Uncons f s) => Monad (ParserSyntax f s) where
             CombBind m (unParserSyntax . k)
 
 instance (Uncons f s) => Alternative (ParserSyntax f s) where
-  empty = ParserSyntax $ Lift $ SArr $ \(st, ()) -> (st, That st)
+  empty = ParserSyntax $ Lift $ Body $ \(st, ()) -> (st, That st)
   ParserSyntax p1 <|> ParserSyntax p2 =
     ParserSyntax $ Op $ R $ R $ CombAlt p1 p2
 
@@ -378,7 +378,7 @@ seqFS x y =
     }
 
 -- | Compute the first-set of an arbitrary syntax subtree.
-firstSetSyntax :: Syntax (ParserSyntaxSig f s) (SArr f) x y -> FirstSet s
+firstSetSyntax :: Syntax (ParserSyntaxSig f s) (Body (,) (->) f) x y -> FirstSet s
 firstSetSyntax (Lift _) = nullFS
 firstSetSyntax (Op op) = case op of
   L (SigCompose g f) -> firstSetSyntax f `seqFS` firstSetSyntax g
@@ -407,7 +407,7 @@ firstSet = firstSetSyntax . unParserSyntax
 unreachableBranches :: ParserSyntax f s a -> [String]
 unreachableBranches = go [] . unParserSyntax
   where
-    go :: [FirstSet s] -> Syntax (ParserSyntaxSig f s) (SArr f) x y -> [String]
+    go :: [FirstSet s] -> Syntax (ParserSyntaxSig f s) (Body (,) (->) f) x y -> [String]
     go _ (Lift _) = []
     go acc (Op op) = case op of
       L (SigCompose g f) ->
@@ -465,7 +465,7 @@ instance (Show s) => Show (Regex s) where
 toRegex :: ParserSyntax f s a -> Maybe (Regex s)
 toRegex = go . unParserSyntax
   where
-    go :: Syntax (ParserSyntaxSig f s) (SArr f) x y -> Maybe (Regex s)
+    go :: Syntax (ParserSyntaxSig f s) (Body (,) (->) f) x y -> Maybe (Regex s)
     go (Lift _) = Just REEmpty
     go (Op op) = case op of
       L (SigCompose g f) -> RESeq <$> go f <*> go g
@@ -502,8 +502,8 @@ deriveSyntax ::
   forall s f a.
   (Eq s, Uncons f s) =>
   s ->
-  Syntax (ParserSyntaxSig f s) (SArr f) () (These a f) ->
-  Syntax (ParserSyntaxSig f s) (SArr f) () (These a f)
+  Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These a f)
 deriveSyntax c syn = case syn of
   Lift _ -> emptyResultSyntax
   Op op -> case op of
@@ -517,8 +517,8 @@ derivePrim ::
   forall s f a.
   (Eq s) =>
   s ->
-  SigPrim f s (SArr f) (Syntax (ParserSyntaxSig f s) (SArr f)) () (These a f) ->
-  Syntax (ParserSyntaxSig f s) (SArr f) () (These a f)
+  SigPrim f s (Body (,) (->) f) (Syntax (ParserSyntaxSig f s) (Body (,) (->) f)) () (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These a f)
 derivePrim c prim = case prim of
   PrimNext -> pureSyntax c
   PrimSatisfy p -> if p c then pureSyntax c else emptyResultSyntax
@@ -536,8 +536,8 @@ deriveComb ::
   forall s f a.
   (Eq s, Uncons f s) =>
   s ->
-  SigComb f s (SArr f) (Syntax (ParserSyntaxSig f s) (SArr f)) () (These a f) ->
-  Syntax (ParserSyntaxSig f s) (SArr f) () (These a f)
+  SigComb f s (Body (,) (->) f) (Syntax (ParserSyntaxSig f s) (Body (,) (->) f)) () (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These a f)
 deriveComb c comb = case comb of
   CombAp pf pa ->
     let left = Op (R (R (CombAp (deriveSyntax c pf) pa)))
@@ -562,24 +562,24 @@ deriveComb c comb = case comb of
   CombFmap g p -> fmapSyntax g (deriveSyntax c p)
 
 -- | Syntax tree that always fails, returning the input stream unchanged.
-emptyResultSyntax :: Syntax (ParserSyntaxSig f s) (SArr f) () (These a f)
-emptyResultSyntax = Lift (SArr (\(st, ()) -> (st, That st)))
+emptyResultSyntax :: Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These a f)
+emptyResultSyntax = Lift (Body (\(st, ()) -> (st, That st)))
 
 -- | Syntax tree that returns a constant value without consuming input.
-pureSyntax :: a -> Syntax (ParserSyntaxSig f s) (SArr f) () (These a f)
-pureSyntax a = Lift (SArr (\(st, ()) -> (st, These a st)))
+pureSyntax :: a -> Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These a f)
+pureSyntax a = Lift (Body (\(st, ()) -> (st, These a st)))
 
 -- | Lift a pure function over the result of a syntax tree using the structural
 -- 'CombFmap' node.
 fmapSyntax ::
   (a -> b) ->
-  Syntax (ParserSyntaxSig f s) (SArr f) () (These a f) ->
-  Syntax (ParserSyntaxSig f s) (SArr f) () (These b f)
+  Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These b f)
 fmapSyntax g syn = Op (R (R (CombFmap g syn)))
 
 -- | Syntax tree for matching a fixed string.
 stringSyntax ::
-  (Eq s) => [s] -> Syntax (ParserSyntaxSig f s) (SArr f) () (These [s] f)
+  (Eq s) => [s] -> Syntax (ParserSyntaxSig f s) (Body (,) (->) f) () (These [s] f)
 stringSyntax cs = Op (R (L (PrimString cs)))
 
 -- | Check whether a parser can succeed without consuming any input, and if
