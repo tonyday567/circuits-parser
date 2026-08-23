@@ -100,15 +100,15 @@ where
 
 import Circuit.Body (Body (..))
 import Circuit.Category (Category (..), K (..))
-import Circuit.Fragment
+import Circuit.Parser (Parser (..), Uncons (..))
+import Circuit.Parser qualified as PU
+import Circuit.Syntax
   ( Algebra (..),
     SigCompose (..),
     Syntax (..),
     evalInto,
     (:+:) (..),
   )
-import Circuit.Parser (Parser (..), Uncons (..))
-import Circuit.Parser qualified as PU
 import Control.Applicative (Alternative (empty, (<|>)), optional)
 import Control.Monad (MonadPlus, void)
 import Data.Kind (Type)
