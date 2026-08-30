@@ -77,7 +77,7 @@ module Circuit.Parser.Syntax
     countS,
     sepByS,
     sepBy1S,
-    withOptionS,
+    withOpertionS,
 
     -- * Execution
     runParserSyntax,
@@ -163,7 +163,7 @@ newtype ParserSyntax (f :: Type) (s :: Type) (a :: Type) = ParserSyntax
 -- | The underlying syntax type supports sequential composition via 'SigCompose'.
 instance Category (Syntax (ParserSyntaxSig f s) (Body (,) f (->))) where
   id = Lift id
-  f . g = Op (L (SigCompose f g))
+  f . g = Oper (L (SigCompose f g))
 
 -- ---------------------------------------------------------------------------
 -- Algebra for execution
@@ -224,17 +224,17 @@ runParserSyntaxIdentity p = PU.runParserIdentity (runParserSyntax p)
 
 instance (Uncons f s) => Functor (ParserSyntax f s) where
   fmap g (ParserSyntax p) =
-    ParserSyntax (Op (R (R (CombFmap g p))))
+    ParserSyntax (Oper (R (R (CombFmap g p))))
 
 instance (Uncons f s) => Applicative (ParserSyntax f s) where
   pure a = ParserSyntax $ Lift $ Body $ \(st, ()) -> (st, These a st)
   ParserSyntax pf <*> ParserSyntax pa =
-    ParserSyntax $ Op $ R $ R $ CombAp pf pa
+    ParserSyntax $ Oper $ R $ R $ CombAp pf pa
 
 instance (Uncons f s) => Monad (ParserSyntax f s) where
   ParserSyntax m >>= k =
     ParserSyntax $
-      Op $
+      Oper $
         R $
           R $
             CombBind m (unParserSyntax . k)
@@ -242,7 +242,7 @@ instance (Uncons f s) => Monad (ParserSyntax f s) where
 instance (Uncons f s) => Alternative (ParserSyntax f s) where
   empty = ParserSyntax $ Lift $ Body $ \(st, ()) -> (st, That st)
   ParserSyntax p1 <|> ParserSyntax p2 =
-    ParserSyntax $ Op $ R $ R $ CombAlt p1 p2
+    ParserSyntax $ Oper $ R $ R $ CombAlt p1 p2
 
 instance (Uncons f s) => MonadPlus (ParserSyntax f s)
 
@@ -251,38 +251,38 @@ instance (Uncons f s) => MonadPlus (ParserSyntax f s)
 -- ---------------------------------------------------------------------------
 
 nextS :: ParserSyntax f s s
-nextS = ParserSyntax $ Op $ R $ L PrimNext
+nextS = ParserSyntax $ Oper $ R $ L PrimNext
 
 anyTokenS :: ParserSyntax f s s
 anyTokenS = nextS
 
 satisfyS :: (s -> Bool) -> ParserSyntax f s s
-satisfyS p = ParserSyntax $ Op $ R $ L (PrimSatisfy p)
+satisfyS p = ParserSyntax $ Oper $ R $ L (PrimSatisfy p)
 
 charS :: (Eq s) => s -> ParserSyntax f s s
-charS c = ParserSyntax $ Op $ R $ L (PrimChar c)
+charS c = ParserSyntax $ Oper $ R $ L (PrimChar c)
 
 stringS :: (Eq s) => [s] -> ParserSyntax f s [s]
-stringS cs = ParserSyntax $ Op $ R $ L (PrimString cs)
+stringS cs = ParserSyntax $ Oper $ R $ L (PrimString cs)
 
 endOfInputS :: ParserSyntax f s ()
-endOfInputS = ParserSyntax $ Op $ R $ L PrimEndOfInput
+endOfInputS = ParserSyntax $ Oper $ R $ L PrimEndOfInput
 
 takeRestS :: ParserSyntax f s f
-takeRestS = ParserSyntax $ Op $ R $ L PrimTakeRest
+takeRestS = ParserSyntax $ Oper $ R $ L PrimTakeRest
 
 -- ---------------------------------------------------------------------------
 -- Combinators
 -- ---------------------------------------------------------------------------
 
 tryS :: ParserSyntax f s a -> ParserSyntax f s a
-tryS (ParserSyntax p) = ParserSyntax $ Op $ R $ R $ CombTry p
+tryS (ParserSyntax p) = ParserSyntax $ Oper $ R $ R $ CombTry p
 
 optionalS :: (Uncons f s) => ParserSyntax f s a -> ParserSyntax f s (Maybe a)
 optionalS = optional
 
 manyS :: ParserSyntax f s a -> ParserSyntax f s [a]
-manyS (ParserSyntax p) = ParserSyntax $ Op $ R $ R $ CombMany p
+manyS (ParserSyntax p) = ParserSyntax $ Oper $ R $ R $ CombMany p
 
 someS :: (Uncons f s) => ParserSyntax f s a -> ParserSyntax f s [a]
 someS p = (:) <$> p <*> manyS p
@@ -301,13 +301,13 @@ sepByS p sep = sepBy1S p sep <|> pure []
 sepBy1S :: (Uncons f s) => ParserSyntax f s a -> ParserSyntax f s b -> ParserSyntax f s [a]
 sepBy1S p sep = p >>= \x -> manyS (tryS (sep *> p)) >>= \xs -> pure (x : xs)
 
-withOptionS ::
+withOpertionS ::
   (Uncons f s) =>
   ParserSyntax f s a ->
   (a -> ParserSyntax f s b) ->
   ParserSyntax f s b ->
   ParserSyntax f s b
-withOptionS p f def = (p >>= f) <|> def
+withOpertionS p f def = (p >>= f) <|> def
 
 -- ---------------------------------------------------------------------------
 -- Static analysis
@@ -380,7 +380,7 @@ seqFS x y =
 -- | Compute the first-set of an arbitrary syntax subtree.
 firstSetSyntax :: Syntax (ParserSyntaxSig f s) (Body (,) f (->)) x y -> FirstSet s
 firstSetSyntax (Lift _) = nullFS
-firstSetSyntax (Op op) = case op of
+firstSetSyntax (Oper op) = case op of
   L (SigCompose g f) -> firstSetSyntax f `seqFS` firstSetSyntax g
   R (L prim) -> case prim of
     PrimNext -> universalFS
@@ -409,7 +409,7 @@ unreachableBranches = go [] . unParserSyntax
   where
     go :: [FirstSet s] -> Syntax (ParserSyntaxSig f s) (Body (,) f (->)) x y -> [String]
     go _ (Lift _) = []
-    go acc (Op op) = case op of
+    go acc (Oper op) = case op of
       L (SigCompose g f) ->
         go acc f ++ go (acc ++ [firstSetSyntax f]) g
       R (L _) -> []
@@ -467,7 +467,7 @@ toRegex = go . unParserSyntax
   where
     go :: Syntax (ParserSyntaxSig f s) (Body (,) f (->)) x y -> Maybe (Regex s)
     go (Lift _) = Just REEmpty
-    go (Op op) = case op of
+    go (Oper op) = case op of
       L (SigCompose g f) -> RESeq <$> go f <*> go g
       R (L prim) -> case prim of
         PrimNext -> Just REAny
@@ -506,7 +506,7 @@ deriveSyntax ::
   Syntax (ParserSyntaxSig f s) (Body (,) f (->)) () (These a f)
 deriveSyntax c syn = case syn of
   Lift _ -> emptyResultSyntax
-  Op op -> case op of
+  Oper op -> case op of
     L (SigCompose _ _) ->
       error "deriveSyntax: explicit SigCompose not supported; use fmap/Applicative/Alternative constructors"
     R (L prim) -> derivePrim c prim
@@ -540,21 +540,21 @@ deriveComb ::
   Syntax (ParserSyntaxSig f s) (Body (,) f (->)) () (These a f)
 deriveComb c comb = case comb of
   CombAp pf pa ->
-    let left = Op (R (R (CombAp (deriveSyntax c pf) pa)))
+    let left = Oper (R (R (CombAp (deriveSyntax c pf) pa)))
         right = case nullableValue (ParserSyntax pf) of
           Just g -> fmapSyntax g (deriveSyntax c pa)
           Nothing -> emptyResultSyntax
-     in Op (R (R (CombAlt left right)))
+     in Oper (R (R (CombAlt left right)))
   CombBind _ _ -> error "deriveComb: CombBind not supported"
   CombAlt p1 p2 ->
-    Op (R (R (CombAlt (deriveSyntax c p1) (deriveSyntax c p2))))
+    Oper (R (R (CombAlt (deriveSyntax c p1) (deriveSyntax c p2))))
   CombMany p ->
-    Op
+    Oper
       ( R
           ( R
               ( CombAp
                   (fmapSyntax (:) (deriveSyntax c p))
-                  (Op (R (R (CombMany p))))
+                  (Oper (R (R (CombMany p))))
               )
           )
       )
@@ -575,12 +575,12 @@ fmapSyntax ::
   (a -> b) ->
   Syntax (ParserSyntaxSig f s) (Body (,) f (->)) () (These a f) ->
   Syntax (ParserSyntaxSig f s) (Body (,) f (->)) () (These b f)
-fmapSyntax g syn = Op (R (R (CombFmap g syn)))
+fmapSyntax g syn = Oper (R (R (CombFmap g syn)))
 
 -- | Syntax tree for matching a fixed string.
 stringSyntax ::
   (Eq s) => [s] -> Syntax (ParserSyntaxSig f s) (Body (,) f (->)) () (These [s] f)
-stringSyntax cs = Op (R (L (PrimString cs)))
+stringSyntax cs = Oper (R (L (PrimString cs)))
 
 -- | Check whether a parser can succeed without consuming any input, and if
 -- so extract the value it would return.
