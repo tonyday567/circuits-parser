@@ -32,7 +32,7 @@
 -- >>> scan (compileProcess (manyS (charS 'a') :: ParserSyntax String Char String)) "aaab"
 -- [Just "a",Just "aa",Just "aaa",Nothing]
 module Circuit.Parser.ProcessCompiler
-  ( -- * Plain Process compiler
+  ( -- * Plain Mealy compiler
     compileProcess,
     compileProcessWithInput,
   )
@@ -40,7 +40,7 @@ where
 
 import Circuit.Parser (Uncons (..))
 import Circuit.Parser.Syntax (ParserSyntax, derive, nullableValue)
-import Circuit.Process (Process (..))
+import Circuit.Process (Mealy (..))
 import Data.Proxy (Proxy (..))
 import Data.These (These (..))
 import Prelude
@@ -62,7 +62,7 @@ dropOne _ xs = case uncons @f @s xs of
 -- Plain Process compiler
 -- ---------------------------------------------------------------------------
 
--- | Compile a parser into a Process machine whose output is the parse result of
+-- | Compile a parser into a Mealy machine whose output is the parse result of
 -- the prefix consumed so far.
 --
 -- The machine state is the Brzozowski derivative of the original parser after
@@ -74,20 +74,20 @@ dropOne _ xs = case uncons @f @s xs of
 compileProcess ::
   (Eq s, Uncons f s) =>
   ParserSyntax f s a ->
-  Process s (Maybe a)
-compileProcess p0 = Process inject step extract
+  Mealy s (Maybe a)
+compileProcess p0 = Mealy inject step extract
   where
     inject c = derive c p0
     step p c = derive c p
     extract = nullableValue
 
--- | Compile a parser into a Process machine tied to a known input stream.
+-- | Compile a parser into a Mealy machine tied to a known input stream.
 --
 -- The state carries the current derivative /and/ the remaining suffix of the
 -- input.  This lets extraction return both a parse result and the leftover
 -- stream, matching the usual parser output shape.
 --
--- Because a 'Process' has no explicit initial state, the input stream is
+-- Because a 'Mealy' has no explicit initial state, the input stream is
 -- captured at compile time and threaded through 'inject' and 'step'.
 --
 -- >>> scan (compileProcessWithInput "ab" (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
@@ -97,8 +97,8 @@ compileProcessWithInput ::
   (Eq s, Uncons f s) =>
   f ->
   ParserSyntax f s a ->
-  Process s (Maybe (a, f))
-compileProcessWithInput input p0 = Process inject step extract
+  Mealy s (Maybe (a, f))
+compileProcessWithInput input p0 = Mealy inject step extract
   where
     inject c = (derive c p0, dropOne (Proxy @s) input)
     step (p, rest) c = (derive c p, dropOne (Proxy @s) rest)
