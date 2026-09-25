@@ -20,7 +20,7 @@
 --
 -- === doctests
 --
--- >>> import Circuit.Cell (scan, fold)
+-- >>> import Circuit.GMachine (scan, fold)
 -- >>> import Circuit.Parser.Syntax (charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 --
@@ -39,7 +39,7 @@ module Circuit.Parser.ProcessCompiler
   )
 where
 
-import Circuit.Cell (Moore, pattern Moore)
+import Circuit.GMachine (Moore, pattern Moore)
 import Circuit.Parser (Uncons (..))
 import Circuit.Parser.Syntax (ParserSyntax, derive, nullableValue)
 import Data.Proxy (Proxy (..))
@@ -47,7 +47,7 @@ import Data.These (These (..))
 import Prelude
 
 -- $setup
--- >>> import Circuit.Cell (scan, fold)
+-- >>> import Circuit.GMachine (scan, fold)
 -- >>> import Circuit.Parser.Syntax (ParserSyntax, charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 
