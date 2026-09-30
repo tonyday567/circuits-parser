@@ -39,7 +39,7 @@ module Circuit.Parser.ProcessCompiler
   )
 where
 
-import Circuit.GMachine (Moore, pattern Moore)
+import Circuit.GMachine (Moore, moore)
 import Circuit.Parser (Uncons (..))
 import Circuit.Parser.Syntax (ParserSyntax, derive, nullableValue)
 import Data.Proxy (Proxy (..))
@@ -76,7 +76,7 @@ compileProcess ::
   (Eq s, Uncons f s) =>
   ParserSyntax f s a ->
   Moore s (Maybe a)
-compileProcess p0 = Moore inject step extract
+compileProcess p0 = moore inject step extract
   where
     inject c = derive c p0
     step p c = derive c p
@@ -99,7 +99,7 @@ compileProcessWithInput ::
   f ->
   ParserSyntax f s a ->
   Moore s (Maybe (a, f))
-compileProcessWithInput input p0 = Moore inject step extract
+compileProcessWithInput input p0 = moore inject step extract
   where
     inject c = (derive c p0, dropOne (Proxy @s) input)
     step (p, rest) c = (derive c p, dropOne (Proxy @s) rest)
