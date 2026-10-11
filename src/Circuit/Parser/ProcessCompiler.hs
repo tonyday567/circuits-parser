@@ -1,5 +1,4 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -20,7 +19,7 @@
 --
 -- === doctests
 --
--- >>> import Circuit.GMachine (scan, fold)
+-- >>> import Circuit.Machine (scan, fold)
 -- >>> import Circuit.Parser.Syntax (charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 --
@@ -39,7 +38,7 @@ module Circuit.Parser.ProcessCompiler
   )
 where
 
-import Circuit.GMachine (Moore, moore)
+import Circuit.Machine (MooreT, moore)
 import Circuit.Parser (Uncons (..))
 import Circuit.Parser.Syntax (ParserSyntax, derive, nullableValue)
 import Data.Proxy (Proxy (..))
@@ -47,7 +46,7 @@ import Data.These (These (..))
 import Prelude
 
 -- $setup
--- >>> import Circuit.GMachine (scan, fold)
+-- >>> import Circuit.Machine (scan, fold)
 -- >>> import Circuit.Parser.Syntax (ParserSyntax, charS, stringS, manyS)
 -- >>> import Control.Applicative ((<|>))
 
@@ -75,7 +74,7 @@ dropOne _ xs = case uncons @f @s xs of
 compileProcess ::
   (Eq s, Uncons f s) =>
   ParserSyntax f s a ->
-  Moore s (Maybe a)
+  MooreT (,) (->) s (Maybe a)
 compileProcess p0 = moore inject step extract
   where
     inject c = derive c p0
@@ -88,7 +87,7 @@ compileProcess p0 = moore inject step extract
 -- input.  This lets extraction return both a parse result and the leftover
 -- stream, matching the usual parser output shape.
 --
--- Because a 'Moore' has no explicit initial state, the input stream is
+-- Because a 'MooreT' has no explicit initial state, the input stream is
 -- captured at compile time and threaded through 'inject' and 'step'.
 --
 -- >>> scan (compileProcessWithInput "ab" (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
@@ -98,7 +97,7 @@ compileProcessWithInput ::
   (Eq s, Uncons f s) =>
   f ->
   ParserSyntax f s a ->
-  Moore s (Maybe (a, f))
+  MooreT (,) (->) s (Maybe (a, f))
 compileProcessWithInput input p0 = moore inject step extract
   where
     inject c = (derive c p0, dropOne (Proxy @s) input)

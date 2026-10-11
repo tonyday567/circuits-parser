@@ -11,19 +11,19 @@
 -- | Reifiable parser syntax.
 --
 -- The parser type in "Circuit.Parser" hides primitive operations inside
--- @K m@ closures over a @Stratum (,) f (K m)@ base. This module
+-- @K m@ closures over a @Step (,) (,) f f (K m)@ base. This module
 -- exposes those primitives as constructors in a syntax tree, so the same
 -- parser can be executed /and/ analyzed.
 --
 -- The plumbing — sequential composition and the structural combinators — is
--- the free category over the pure ambient-state arrow @Stratum (,) f (->)@
--- (@Stratum (,) f (->)@), extended with 'SigPrim' and 'SigComb' signatures.
+-- the free category over the pure ambient-state arrow @Step (,) (,) f f (->)@
+-- (@Step (,) (,) f f (->)@), extended with 'SigPrim' and 'SigComb' signatures.
 -- The stream @f@ is ambient state throughout: primitives consume it, and
 -- choice is a structural combinator, not a trace. There is no 'SigKnot' /
--- @Loop Either@ here — the knot-body category @Stratum@ is the fold target,
+-- @Loop Either@ here — the knot-body category @Step@ is the fold target,
 -- and the stream is never hidden in a feedback channel.
 --
--- Executing a syntax tree is an algebra fold into @Stratum (,) f (K m)@;
+-- Executing a syntax tree is an algebra fold into @Step (,) (,) f f (K m)@;
 -- static analysis is a fold into other targets ('FirstSet', 'Regex', the
 -- Brzozowski derivative).
 --
@@ -99,7 +99,7 @@ module Circuit.Parser.Syntax
 where
 
 import Circuit.Category (Category (..), K (..))
-import Circuit.GMachine (Stratum (..))
+import Circuit.Machine (Step (..))
 import Circuit.Parser (Parser (..), Uncons (..))
 import Circuit.Parser qualified as PU
 import Circuit.Syntax
@@ -153,15 +153,15 @@ data SigComb (f :: Type) (s :: Type) (arr :: Type -> Type -> Type) (rec :: Type 
 type ParserSyntaxSig f s = SigCompose :+: SigPrim f s :+: SigComb f s
 
 -- | A parser syntax tree with stream type @f@, element type @s@, and result
--- type @a@. The stream is ambient state (@Stratum (,) f (->)@ base arrow), the source
+-- type @a@. The stream is ambient state (@Step (,) (,) f f (->)@ base arrow), the source
 -- object is unit, and the target carries the result plus leftover stream.
 newtype ParserSyntax (f :: Type) (s :: Type) (a :: Type) = ParserSyntax
   { unParserSyntax ::
-      Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These a f)
+      Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These a f)
   }
 
 -- | The underlying syntax type supports sequential composition via 'SigCompose'.
-instance Category (Syntax (ParserSyntaxSig f s) (Stratum (,) f (->))) where
+instance Category (Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->))) where
   id = Lift id
   f . g = Oper (L (SigCompose f g))
 
@@ -170,13 +170,13 @@ instance Category (Syntax (ParserSyntaxSig f s) (Stratum (,) f (->))) where
 -- ---------------------------------------------------------------------------
 
 -- | Map primitive operations to their implementations in
--- @Stratum (,) f (K m)@.
+-- @Step (,) (,) f f (K m)@.
 instance
   (Monad m, Uncons f s) =>
-  Algebra (SigPrim f s) (Stratum (,) f (->)) (Stratum (,) f (K m))
+  Algebra (SigPrim f s) (Step (,) (,) f f (->)) (Step (,) (,) f f (K m))
   where
   type
-    Ctx (SigPrim f s) (Stratum (,) f (->)) (Stratum (,) f (K m)) =
+    Ctx (SigPrim f s) (Step (,) (,) f f (->)) (Step (,) (,) f f (K m)) =
       (Monad m, Uncons f s)
   alg _ _ PrimNext = unParser (PU.next @m @f @s)
   alg _ _ (PrimSatisfy p) = unParser (PU.satisfy @m @f @s p)
@@ -187,10 +187,10 @@ instance
 
 instance
   (Monad m, Uncons f s) =>
-  Algebra (SigComb f s) (Stratum (,) f (->)) (Stratum (,) f (K m))
+  Algebra (SigComb f s) (Step (,) (,) f f (->)) (Step (,) (,) f f (K m))
   where
   type
-    Ctx (SigComb f s) (Stratum (,) f (->)) (Stratum (,) f (K m)) =
+    Ctx (SigComb f s) (Step (,) (,) f f (->)) (Step (,) (,) f f (K m)) =
       (Monad m, Uncons f s)
   alg _ rec (CombAp pf pa) = unParser (Parser @m @f @s (rec pf) <*> Parser @m @f @s (rec pa))
   alg _ rec (CombBind p k) = unParser (Parser @m @f @s (rec p) >>= \a -> Parser @m @f @s (rec (k a)))
@@ -207,8 +207,8 @@ runParserSyntax ::
   Parser m f s a
 runParserSyntax (ParserSyntax syn) = Parser (evalInto emb syn)
   where
-    emb :: forall x y. Stratum (,) f (->) x y -> Stratum (,) f (K m) x y
-    emb (Stratum g) = Stratum $ K (pure . g)
+    emb :: forall x y. Step (,) (,) f f (->) x y -> Step (,) (,) f f (K m) x y
+    emb (Step g) = Step $ K (pure . g)
 
 -- | Interpret syntax into an identity parser.
 runParserSyntaxIdentity ::
@@ -227,7 +227,7 @@ instance (Uncons f s) => Functor (ParserSyntax f s) where
     ParserSyntax (Oper (R (R (CombFmap g p))))
 
 instance (Uncons f s) => Applicative (ParserSyntax f s) where
-  pure a = ParserSyntax $ Lift $ Stratum $ \(st, ()) -> (st, These a st)
+  pure a = ParserSyntax $ Lift $ Step $ \(st, ()) -> (st, These a st)
   ParserSyntax pf <*> ParserSyntax pa =
     ParserSyntax $ Oper $ R $ R $ CombAp pf pa
 
@@ -240,7 +240,7 @@ instance (Uncons f s) => Monad (ParserSyntax f s) where
             CombBind m (unParserSyntax . k)
 
 instance (Uncons f s) => Alternative (ParserSyntax f s) where
-  empty = ParserSyntax $ Lift $ Stratum $ \(st, ()) -> (st, That st)
+  empty = ParserSyntax $ Lift $ Step $ \(st, ()) -> (st, That st)
   ParserSyntax p1 <|> ParserSyntax p2 =
     ParserSyntax $ Oper $ R $ R $ CombAlt p1 p2
 
@@ -378,7 +378,7 @@ seqFS x y =
     }
 
 -- | Compute the first-set of an arbitrary syntax subtree.
-firstSetSyntax :: Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) x y -> FirstSet s
+firstSetSyntax :: Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) x y -> FirstSet s
 firstSetSyntax (Lift _) = nullFS
 firstSetSyntax (Oper op) = case op of
   L (SigCompose g f) -> firstSetSyntax f `seqFS` firstSetSyntax g
@@ -407,7 +407,7 @@ firstSet = firstSetSyntax . unParserSyntax
 unreachableBranches :: ParserSyntax f s a -> [String]
 unreachableBranches = go [] . unParserSyntax
   where
-    go :: [FirstSet s] -> Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) x y -> [String]
+    go :: [FirstSet s] -> Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) x y -> [String]
     go _ (Lift _) = []
     go acc (Oper op) = case op of
       L (SigCompose g f) ->
@@ -465,7 +465,7 @@ instance (Show s) => Show (Regex s) where
 toRegex :: ParserSyntax f s a -> Maybe (Regex s)
 toRegex = go . unParserSyntax
   where
-    go :: Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) x y -> Maybe (Regex s)
+    go :: Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) x y -> Maybe (Regex s)
     go (Lift _) = Just REEmpty
     go (Oper op) = case op of
       L (SigCompose g f) -> RESeq <$> go f <*> go g
@@ -502,8 +502,8 @@ deriveSyntax ::
   forall s f a.
   (Eq s, Uncons f s) =>
   s ->
-  Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These a f) ->
-  Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These a f)
+  Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These a f)
 deriveSyntax c syn = case syn of
   Lift _ -> emptyResultSyntax
   Oper op -> case op of
@@ -517,8 +517,8 @@ derivePrim ::
   forall s f a.
   (Eq s) =>
   s ->
-  SigPrim f s (Stratum (,) f (->)) (Syntax (ParserSyntaxSig f s) (Stratum (,) f (->))) () (These a f) ->
-  Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These a f)
+  SigPrim f s (Step (,) (,) f f (->)) (Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->))) () (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These a f)
 derivePrim c prim = case prim of
   PrimNext -> pureSyntax c
   PrimSatisfy p -> if p c then pureSyntax c else emptyResultSyntax
@@ -536,8 +536,8 @@ deriveComb ::
   forall s f a.
   (Eq s, Uncons f s) =>
   s ->
-  SigComb f s (Stratum (,) f (->)) (Syntax (ParserSyntaxSig f s) (Stratum (,) f (->))) () (These a f) ->
-  Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These a f)
+  SigComb f s (Step (,) (,) f f (->)) (Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->))) () (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These a f)
 deriveComb c comb = case comb of
   CombAp pf pa ->
     let left = Oper (R (R (CombAp (deriveSyntax c pf) pa)))
@@ -562,24 +562,24 @@ deriveComb c comb = case comb of
   CombFmap g p -> fmapSyntax g (deriveSyntax c p)
 
 -- | Syntax tree that always fails, returning the input stream unchanged.
-emptyResultSyntax :: Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These a f)
-emptyResultSyntax = Lift (Stratum (\(st, ()) -> (st, That st)))
+emptyResultSyntax :: Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These a f)
+emptyResultSyntax = Lift (Step (\(st, ()) -> (st, That st)))
 
 -- | Syntax tree that returns a constant value without consuming input.
-pureSyntax :: a -> Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These a f)
-pureSyntax a = Lift (Stratum (\(st, ()) -> (st, These a st)))
+pureSyntax :: a -> Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These a f)
+pureSyntax a = Lift (Step (\(st, ()) -> (st, These a st)))
 
 -- | Lift a pure function over the result of a syntax tree using the structural
 -- 'CombFmap' node.
 fmapSyntax ::
   (a -> b) ->
-  Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These a f) ->
-  Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These b f)
+  Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These a f) ->
+  Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These b f)
 fmapSyntax g syn = Oper (R (R (CombFmap g syn)))
 
 -- | Syntax tree for matching a fixed string.
 stringSyntax ::
-  (Eq s) => [s] -> Syntax (ParserSyntaxSig f s) (Stratum (,) f (->)) () (These [s] f)
+  (Eq s) => [s] -> Syntax (ParserSyntaxSig f s) (Step (,) (,) f f (->)) () (These [s] f)
 stringSyntax cs = Oper (R (L (PrimString cs)))
 
 -- | Check whether a parser can succeed without consuming any input, and if
