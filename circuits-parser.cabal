@@ -48,6 +48,7 @@ library
     Circuit.Parser.Examples
     Circuit.Parser.Json
     Circuit.Parser.Json.Lexer
+    Circuit.Parser.Json.Select
     Circuit.Parser.Json.Unescape
     Circuit.Parser.Json.Value
     Circuit.Parser.Lexer
