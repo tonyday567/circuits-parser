@@ -59,32 +59,31 @@ data JsonToken
 -- >>> runJsonLexerBS (C.pack "@")
 -- Left (0,"unexpected byte 64")
 runJsonLexerBS :: ByteString -> Either (Int, String) [JsonToken]
-runJsonLexerBS bs = go 0
+runJsonLexerBS bs = go 0 []
   where
     !len = BS.length bs
-    go !i
-      | i >= len = Right []
+    go !i !acc
+      | i >= len = Right (reverse acc)
       | otherwise = case BSU.unsafeIndex bs i of
           w
-            | isSpaceW w -> go (i + 1)
-          0x7B -> emit TBraceOpen i -- {
-          0x7D -> emit TBraceClose i -- }
-          0x5B -> emit TBrackOpen i -- [
-          0x5D -> emit TBrackClose i -- ]
-          0x2C -> emit TComma i -- ,
-          0x3A -> emit TColon i -- :
-          0x22 -> stringAt (i + 1) -- "
-          0x74 -> literalAt i "rue" TTrue -- t
-          0x66 -> literalAt i "alse" TFalse -- f
-          0x6E -> literalAt i "ull" TNull -- n
+            | isSpaceW w -> go (i + 1) acc
+          0x7B -> go (i + 1) (TBraceOpen : acc) -- {
+          0x7D -> go (i + 1) (TBraceClose : acc) -- }
+          0x5B -> go (i + 1) (TBrackOpen : acc) -- [
+          0x5D -> go (i + 1) (TBrackClose : acc) -- ]
+          0x2C -> go (i + 1) (TComma : acc) -- ,
+          0x3A -> go (i + 1) (TColon : acc) -- :
+          0x22 -> stringAt (i + 1) acc -- "
+          0x74 -> literalAt i "rue" TTrue acc -- t
+          0x66 -> literalAt i "alse" TFalse acc -- f
+          0x6E -> literalAt i "ull" TNull acc -- n
           w
-            | w == 0x2D || isDigitW w -> numberAt i
+            | w == 0x2D || isDigitW w -> numberAt i acc
             | otherwise -> Left (i, "unexpected byte " ++ show w)
-    emit t i = (t :) <$> go (i + 1)
     -- i points just past the opening quote
-    stringAt !i = case stringEnd i of
+    stringAt !i acc = case stringEnd i of
       Nothing -> Left (len, "unterminated string")
-      Just j -> (TString (slice i j) :) <$> go (j + 1)
+      Just j -> go (j + 1) (TString (slice i j) : acc)
     -- index of the closing quote (backslash skips the next byte), or end
     stringEnd !i
       | i >= len = Nothing
@@ -92,9 +91,9 @@ runJsonLexerBS bs = go 0
           0x5C -> if i + 1 >= len then Nothing else stringEnd (i + 2)
           0x22 -> Just i
           _ -> stringEnd (i + 1)
-    numberAt !i =
+    numberAt !i acc =
       let !j = numberEnd i
-       in (TNumber (slice i j) :) <$> go j
+       in go j (TNumber (slice i j) : acc)
     numberEnd !i
       | i >= len = i
       | otherwise =
@@ -103,9 +102,9 @@ runJsonLexerBS bs = go 0
                 then numberEnd (i + 1)
                 else i
     -- i points at the literal's first byte; rest is the remaining bytes
-    literalAt !i rest t
+    literalAt !i rest t acc
       | i + 1 + BS.length rest <= len && BSU.unsafeTake (BS.length rest) (BSU.unsafeDrop (i + 1) bs) == rest =
-          (t :) <$> go (i + 1 + BS.length rest)
+          go (i + 1 + BS.length rest) (t : acc)
       | otherwise = Left (i, "bad literal")
     slice s e = BSU.unsafeTake (e - s) (BSU.unsafeDrop s bs)
 
