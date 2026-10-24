@@ -160,7 +160,7 @@ leftoverOf (These _ f) = f
 
 -- | Run a parser in the base monad, returning the raw 'These' result.
 runParser :: forall m f s a. (Monad m) => Parser m f s a -> f -> m (These a f)
-runParser p f = snd <$> runK (run (unParser p)) (f, ())
+runParser p f = snd <$> runK (step (unParser p)) (f, ())
 
 -- | Run a pure parser.
 runParserIdentity :: Parser Identity f s a -> f -> These a f
@@ -228,7 +228,7 @@ guardResult p def =
 -- | Keep only successes matching the predicate.
 filterP :: forall m f s a. (Monad m, Uncons f s) => Parser m f s a -> (a -> Bool) -> Parser m f s a
 filterP (Parser p) f = Parser $ Step $ K $ \(s, ()) -> do
-  (_, r) <- runK (run p) (s, ())
+  (_, r) <- runK (step p) (s, ())
   let r' = guardResult f s r
   pure (leftoverOf @f @s r', r')
 
@@ -250,7 +250,7 @@ endOfInput = Parser $ Step $ K $ \(f, ()) ->
 
 instance (Monad m) => Functor (Parser m f s) where
   fmap g (Parser p) = Parser $ Step $ K $ \(f, ()) -> do
-    (f', r) <- runK (run p) (f, ())
+    (f', r) <- runK (step p) (f, ())
     pure (f', first g r)
 
 instance (Monad m, Uncons f s) => Applicative (Parser m f s) where
@@ -258,12 +258,12 @@ instance (Monad m, Uncons f s) => Applicative (Parser m f s) where
 
   Parser pf <*> Parser pa = Parser $ Step $ K $ \(s, ()) ->
     let app g s' = do
-          (s2, r2) <- runK (run pa) (s', ())
+          (s2, r2) <- runK (step pa) (s', ())
           case r2 of
             That _ -> pure (s, That s)
             _ -> pure (s2, first g r2)
      in do
-          (_, r1) <- runK (run pf) (s, ())
+          (_, r1) <- runK (step pf) (s, ())
           case r1 of
             That _ -> pure (s, That s)
             This g -> app g (nil @f @s)
@@ -271,19 +271,19 @@ instance (Monad m, Uncons f s) => Applicative (Parser m f s) where
 
 instance (Monad m, Uncons f s) => Monad (Parser m f s) where
   Parser m >>= k = Parser $ Step $ K $ \(s, ()) -> do
-    (s1, r1) <- runK (run m) (s, ())
+    (s1, r1) <- runK (step m) (s, ())
     case r1 of
       That _ -> pure (s1, That s1)
-      This a -> runK (run (unParser (k a))) (nil @f @s, ())
-      These a s1' -> runK (run (unParser (k a))) (s1', ())
+      This a -> runK (step (unParser (k a))) (nil @f @s, ())
+      These a s1' -> runK (step (unParser (k a))) (s1', ())
 
 instance (Monad m, Uncons f s) => Alternative (Parser m f s) where
   empty = Parser $ Step $ K $ \(f, ()) -> pure (f, That f)
 
   Parser p1 <|> Parser p2 = Parser $ Step $ K $ \(s, ()) -> do
-    (s1, r1) <- runK (run p1) (s, ())
+    (s1, r1) <- runK (step p1) (s, ())
     case r1 of
-      That _ -> runK (run p2) (s1, ())
+      That _ -> runK (step p2) (s1, ())
       _ -> pure (s1, r1)
 
 instance (Monad m, Uncons f s) => MonadPlus (Parser m f s)
@@ -350,7 +350,7 @@ chainr f p z = go
 -- possible.
 try :: forall m f s a. (Monad m, Uncons f s) => Parser m f s a -> Parser m f s a
 try (Parser p) = Parser $ Step $ K $ \(s, ()) -> do
-  (_, r) <- runK (run p) (s, ())
+  (_, r) <- runK (step p) (s, ())
   pure $ case r of
     That _ -> (s, That s)
     result -> (leftoverOf @f @s result, result)
@@ -370,7 +370,7 @@ lineEnd = char '\n' <|> (endOfInput $> ' ')
 -- 'ByteString').
 capturedBS :: forall m a. (Monad m) => Parser m ByteString Char a -> Parser m ByteString Char (ByteString, a)
 capturedBS (Parser p) = Parser $ Step $ K $ \(s, ()) -> do
-  (_, r) <- runK (run p) (s, ())
+  (_, r) <- runK (step p) (s, ())
   pure $ case r of
     That _ -> (s, That s)
     This a -> (B.empty, These (s, a) B.empty)

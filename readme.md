@@ -61,7 +61,7 @@ For strict, measured streams (`ByteString`, `Text`) the end is known in O(1), so
 ## the parser is the same shape
 
 ```haskell
-newtype Parser f s a = Parser { unParser :: Trace Either (->) f (These a f) }
+newtype Parser f s a = Parser { unParser :: FreeTrace Either (->) f (These a f) }
 
 runParser :: Parser f s a -> f -> These a f
 ```
@@ -72,7 +72,7 @@ The base category of `Parser` is exactly the arrows `f -> These · f` — the co
 
 ## two tensors, two jobs
 
-`Parser f s a = Trace Either (->) f (These a f)` carries both tensors of the circuits core, each doing a distinct job:
+`Parser f s a = FreeTrace Either (->) f (These a f)` carries both tensors of the circuits core, each doing a distinct job:
 
 | tensor | axis | role in the parser |
 |--------|------|--------------------|
