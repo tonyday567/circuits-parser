@@ -17,6 +17,19 @@
 --   * @m = Identity@ — attoparsec-style pure parser
 --   * @m = StateT s (ExceptT e n)@ — megaparsec-style state + errors
 --
+-- The same parser definition serves both families:
+--
+-- @
+-- abOrA = string "ab" '<|>' string "a"
+-- @
+--
+-- run it pure via 'runParserIdentity', or under state + errors with a
+-- megaparsec-style runner:
+--
+-- @
+-- runMega p f st0 = runExceptT (runStateT (runParser p f) st0)
+-- @
+--
 -- First-line libraries add 'Applicative', 'Alternative', 'Monad', and
 -- 'MonadLogic' instances on top of this syntax.
 --

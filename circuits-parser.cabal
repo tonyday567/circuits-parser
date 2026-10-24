@@ -45,7 +45,6 @@ library
     Circuit.Parser
     Circuit.Parser.Csv
     Circuit.Parser.Csv.Lexer
-    Circuit.Parser.Examples
     Circuit.Parser.Json
     Circuit.Parser.Json.Lexer
     Circuit.Parser.Json.Select
@@ -63,7 +62,6 @@ library
     bytestring >=0.11 && <0.13,
     circuits >=0.3 && <0.4,
     containers >=0.6 && <0.9,
-    mtl >=2.2.2 && <2.4,
     scientific >=0.3 && <0.4,
     text >=1.2 && <2.2,
     these >=1.1 && <1.3,
