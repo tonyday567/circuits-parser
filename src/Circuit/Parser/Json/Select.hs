@@ -71,6 +71,7 @@ data Want
 -- combinator path's @jobject@: pairs are string-colon-value, a comma
 -- commits to another pair — a trailing comma is a parse failure.
 --
+-- >>> import Circuit.Parser.Json.Lexer (JsonToken (..), runJsonLexerBS)
 -- >>> Right (TBraceOpen : ts) = runJsonLexerBS (C.pack "{\"a\":1,\"big\":[1,2,3],\"b\":\"x\"}")
 -- >>> fields [("a", WNum), ("b", WStr)] ts
 -- Just ([("a",JNumber 1.0),("b",JString "x")],[])
