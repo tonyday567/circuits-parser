@@ -314,8 +314,28 @@ satisfyAscii :: forall m f. (Monad m, Uncons f Char) => (Char -> Bool) -> Parser
 satisfyAscii p = satisfy (\c -> isAscii c && p c)
 
 -- | Skip zero or more elements matching the predicate.
+--
+-- >>> runParserIdentity (skipWhile (== 'a')) ""
+-- These () ""
+--
+-- >>> runParserIdentity (skipWhile (== 'a')) "a"
+-- These () ""
+--
+-- >>> runParserIdentity (skipWhile (== 'a')) "b"
+-- These () "b"
 skipWhile :: forall m f s. (Monad m, Uncons f s) => (s -> Bool) -> Parser m f s ()
-skipWhile p = void (many (satisfy p))
+skipWhile p = Parser $ Step $ K $ \(s, ()) ->
+  let r = go s
+   in pure (leftoverOf @f @s r, r)
+  where
+    go s0 = case uncons @f @s s0 of
+      That _ -> These () s0
+      This x
+        | p x -> These () (nil @f @s)
+        | otherwise -> These () s0
+      These x s'
+        | p x -> go s'
+        | otherwise -> These () s0
 
 -- | Consume all remaining input as the value.
 takeRest :: forall m f s. (Monad m, Uncons f s) => Parser m f s f
