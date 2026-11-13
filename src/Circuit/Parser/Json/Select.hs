@@ -24,6 +24,9 @@ module Circuit.Parser.Json.Select
     Want (..),
     fields,
 
+    -- * flat extraction
+    flatFields,
+
     -- * full materialization
     treeOf,
     decodeJsonFast,
@@ -40,6 +43,7 @@ import Circuit.Parser.Json.Unescape (unescape)
 import Circuit.Parser.Json.Value (Json (..))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
+import Data.ByteString.Char8 qualified as BC
 import Data.Text (Text)
 import Data.Vector qualified as V
 
@@ -189,6 +193,135 @@ skipElems ts = skipValue ts >>= afterElem
     afterElem (TBrackClose : ts') = Just ts'
     afterElem (TComma : ts') = skipValue ts' >>= afterElem
     afterElem _ = Nothing
+
+-- | Flat extraction: one object, values as raw slices.
+--
+-- "Flat" is one level of object nesting, not one level of value: a transcript
+-- line carries @\"to\":[]@ and @\"thread\":[3,10]@, so arrays of scalars are in
+-- the subset and their bytes come back as a slice. A nested object is refused,
+-- because that is a different shape of document.
+--
+-- The walk is over bytes rather than tokens so a value can be returned as a span
+-- of the input: a consumer that wants text never builds a 'Json' tree, and a key
+-- it does not want costs only the scan that skips it. What every value does pay
+-- for is validation, and it is the combinator path's own — 'unescape' for keys
+-- and strings, 'validNumber' for numbers — rather than whatever the lexer
+-- tolerates.
+--
+-- Refused, not guessed: a root that is not an object, a nested object value, a
+-- number outside the JSON grammar (@01@, @1e@), a literal that is not one of the
+-- three, an unterminated string, a missing value after a colon, a trailing
+-- comma, and anything after the closing brace. Duplicate keys are kept in
+-- document order, which is what a decoded 'JObject' holds.
+--
+-- >>> flatFields (C.pack "{\"a\":1,\"b\":\"x\",\"c\":true}")
+-- Right [("a","1"),("b","x"),("c","true")]
+--
+-- >>> flatFields (C.pack "{\"to\":[],\"thread\":[3,10]}")
+-- Right [("to","[]"),("thread","[3,10]")]
+--
+-- >>> flatFields (C.pack "{\"a\":{\"b\":1}}")
+-- Left "nested object is not flat"
+--
+-- >>> flatFields (C.pack "{\"a\":[[1]]}")
+-- Left "nested array is not flat"
+--
+-- >>> flatFields (C.pack "{\"a\":01}")
+-- Left "bad number"
+--
+-- >>> flatFields (C.pack "{\"a\":1,}")
+-- Left "bad key"
+--
+-- >>> flatFields (C.pack "{\"a\":1}{\"b\":2}")
+-- Left "trailing bytes after the object"
+flatFields :: ByteString -> Either String [(ByteString, ByteString)]
+flatFields s0 = do
+  (ps, k) <- object (ws 0)
+  if ws k == n then Right [(kb, slice vs ve) | (kb, (vs, ve)) <- ps] else Left "trailing bytes after the object"
+  where
+    n = B.length s0
+    at i = B.index s0 i
+    slice a b = B.take (b - a) (B.drop a s0)
+    -- a string body: from just inside the opening quote to just inside the
+    -- closing one, with backslash escapes tracked as the lexer tracks them
+    body i j = B.take (j - i - 2) (B.drop (i + 1) s0)
+    ws i
+      | i < n && (at i == 32 || at i == 9 || at i == 10 || at i == 13) = ws (i + 1)
+      | otherwise = i
+    quote i0 = go (i0 + 1)
+      where
+        go i
+          | i >= n = Left "unterminated string"
+          | at i == 92 = if i + 1 < n then go (i + 2) else Left "unterminated string"
+          | at i == 34 = Right (i + 1)
+          | otherwise = go (i + 1)
+    isNumByte w = w == 45 || w == 43 || (w >= 48 && w <= 57) || w == 46 || w == 101 || w == 69
+    numEnd i
+      | i < n && isNumByte (at i) = numEnd (i + 1)
+      | otherwise = i
+    number i =
+      let j = numEnd i
+       in if j > i && validNumber (slice i j) then Right ((i, j), j) else Left "bad number"
+    literal i w =
+      let m = B.length w
+       in if slice i (i + m) == w then Right ((i, i + m), i + m) else Left "bad literal"
+    -- one value; scalars and arrays of scalars, never a nested object
+    value i
+      | i >= n = Left "missing value"
+      | at i == 34 = do
+          j <- quote i
+          _ <- unescape (body i j)
+          Right ((i + 1, j - 1), j)
+      | at i == 91 = array i
+      | at i == 123 = Left "nested object is not flat"
+      | at i == 116 = literal i (BC.pack "true")
+      | at i == 102 = literal i (BC.pack "false")
+      | at i == 110 = literal i (BC.pack "null")
+      | isNumByte (at i) = number i
+      | otherwise = Left "bad value"
+    -- an array's own elements are scalars: the subset is one level of array, and
+    -- a nested array or object inside it is a different shape of document
+    scalarOnly i
+      | i < n && at i == 91 = Left "nested array is not flat"
+      | otherwise = value i
+    array i0 = go (ws (i0 + 1))
+      where
+        go i
+          | i >= n = Left "unterminated array"
+          | at i == 93 = Right ((i0, i + 1), i + 1)
+          | otherwise = do
+              (_, j) <- scalarOnly i
+              case ws j of
+                m
+                  | m < n && at m == 44 -> go (ws (m + 1))
+                  | m < n && at m == 93 -> Right ((i0, m + 1), m + 1)
+                  | otherwise -> Left "bad array"
+    -- pairs: the object at i, returning the pairs and the index after the brace
+    object i
+      | i >= n = Left "empty input"
+      | at i /= 123 = Left "root is not an object"
+      | otherwise = pairs [] (ws (i + 1))
+    pairs acc i
+      | i >= n = Left "unterminated object"
+      | at i == 125 = Right (reverse acc, i + 1)
+      | at i /= 34 = Left "bad key"
+      | otherwise = do
+          j <- quote i
+          let kb = body i j
+          _ <- unescape kb
+          let c = ws j
+          if c >= n || at c /= 58
+            then Left "missing colon"
+            else do
+              ((vs, ve), k) <- value (ws (c + 1))
+              case ws k of
+                m
+                  | m < n && at m == 125 -> Right (reverse ((kb, (vs, ve)) : acc), m + 1)
+                  | m < n && at m == 44 ->
+                      if ws (m + 1) < n && at (ws (m + 1)) == 34
+                        then pairs ((kb, (vs, ve)) : acc) (ws (m + 1))
+                        else Left "bad key"
+                  | otherwise -> Left "bad object"
 
 -- | The JSON number grammar at byte level:
 -- @-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?@. The lexer's
