@@ -90,6 +90,18 @@ compileProcess p0 = moore inject step extract
 -- Because a 'MooreT' has no explicit initial state, the input stream is
 -- captured at compile time and threaded through 'inject' and 'step'.
 --
+-- The scanned tape must be a prefix of the captured input, starting with its
+-- first token. The captured input is authoritative for leftovers; no check
+-- compares its tokens with the scanned tape. If the two diverge, the
+-- derivative and the leftover describe different streams:
+--
+-- >>> scan (compileProcessWithInput "ab" (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "aX"
+-- [Just ("a","b"),Nothing]
+--
+-- The first output's @"b"@ comes from the captured @"ab"@, not from the
+-- scanned @"aX"@. With a matching tape, each successful output pairs a parse
+-- of the consumed prefix with the corresponding suffix of the captured input.
+--
 -- >>> scan (compileProcessWithInput "ab" (stringS "ab" <|> stringS "a" :: ParserSyntax String Char String)) "ab"
 -- [Just ("a","b"),Just ("ab","")]
 compileProcessWithInput ::

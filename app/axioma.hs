@@ -11,12 +11,17 @@
 -- Exits nonzero on the first category with any failure, listing them all.
 module Main (main) where
 
+import Circuit.Machine (scan)
+import Circuit.Parser (These (..))
 import Circuit.Parser.Csv (Csv (..), decodeCsv)
 import Circuit.Parser.Csv.Lexer (CsvToken (..), runCsvLexerBS)
 import Circuit.Parser.Framing
 import Circuit.Parser.Json
+import Circuit.Parser.ProcessCompiler (compileProcessWithInput)
+import Circuit.Parser.Syntax (ParserSyntax, runParserSyntaxIdentity, stringS)
 import Circuit.Post (Post (..), deliversTo)
 import Circuit.Shared (Stamped (..))
+import Control.Applicative ((<|>))
 import Data.ByteString qualified as B
 import Data.Maybe (fromMaybe)
 import Data.Scientific (scientific)
@@ -29,7 +34,7 @@ import System.IO (hPutStrLn, stderr)
 
 main :: IO ()
 main = do
-  let closed = concat [valueCases, numberCases, stringCases, rejectCases, lexerCases, encodeCases, csvCases, framingCases]
+  let closed = concat [processCases, valueCases, numberCases, stringCases, rejectCases, lexerCases, encodeCases, csvCases, framingCases]
       fails = closed
   if null fails
     then putStrLn "axioma: all green"
@@ -44,6 +49,43 @@ check :: (Eq a, Show a) => String -> a -> a -> [String]
 check name expected actual
   | expected == actual = []
   | otherwise = [name ++ ": expected " ++ show expected ++ ", got " ++ show actual]
+
+-- * process compiler input contract
+
+processSyntax :: ParserSyntax String Char String
+processSyntax = stringS "ab" <|> stringS "a"
+
+wholeInputResult :: These a String -> Maybe (a, String)
+wholeInputResult (This a) = Just (a, "")
+wholeInputResult (These a rest) = Just (a, rest)
+wholeInputResult (That _) = Nothing
+
+lastSuccess :: [Maybe a] -> Maybe a
+lastSuccess = foldl step Nothing
+  where
+    step acc Nothing = acc
+    step _ x = x
+
+processCases :: [String]
+processCases =
+  let input = "ab!"
+      outputs = scan (compileProcessWithInput input processSyntax)
+      -- The scanned "aX" disagrees with captured "ab!" at its second token.
+      -- The first leftover must nevertheless be the captured suffix "b!":
+      -- that is the documented authoritative stream.
+      divergent = outputs "aX"
+      -- On the matching tape, the last successful prefix is the same result
+      -- and suffix as the corresponding whole-stream syntax run.
+      wholeInput = wholeInputResult (runParserSyntaxIdentity processSyntax input)
+      matching = lastSuccess (outputs input)
+   in check
+        "process compiler divergent tape keeps captured leftover"
+        [Just ("a", "b!"), Nothing]
+        divergent
+        ++ check
+          "process compiler matching tape equals whole-input syntax parse"
+          wholeInput
+          matching
 
 dec :: B.ByteString -> Either String Json
 dec = decodeJson
