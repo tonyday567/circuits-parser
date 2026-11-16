@@ -266,6 +266,13 @@ rejectAt name expectedRow expectedOffset input =
     Left (RowError row offset _) -> check name (expectedRow, expectedOffset) (row, offset)
     Right posts -> [name ++ ": expected rejection, decoded " ++ show (length posts) ++ " row(s)"]
 
+-- | Reject and compare the whole 'RowError', reason included.
+rejectRow :: String -> RowError -> T.Text -> [String]
+rejectRow name expected input =
+  case decodeLog input of
+    Left err -> check name expected err
+    Right posts -> [name ++ ": expected rejection, decoded " ++ show (length posts) ++ " row(s)"]
+
 framingCases :: [String]
 framingCases =
   concat
@@ -342,6 +349,14 @@ framingCases =
         3
         (T.length (encodeRow stored) + 2)
         (encodeRow stored <> "\n\n{\"id\":"),
+      -- The whole RowError, reason included, so the codec's own sentence is
+      -- pinned rather than a wrapper's rendering of it. A fractional-second
+      -- timestamp is the shape the August fleet log carries, and the offset is
+      -- the second row's start, one character past the first row's newline.
+      rejectRow
+        "framing timestamp row error triple"
+        (RowError 2 (T.length (encodeRow stored) + 1) "ts: expected %Y-%m-%dT%H:%M:%S UTC timestamp")
+        (encodeRow stored <> "\n" <> changedRow "ts" (JString "2026-08-07T01:01:14.369092+00:00")),
       check
         "framing syntax error names a byte offset"
         (Left "invalid JSON at byte 10: unterminated string")
