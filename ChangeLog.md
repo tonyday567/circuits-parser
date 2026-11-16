@@ -2,6 +2,10 @@
 
 ## unreleased
 
+- Added `Circuit.Parser.Framing`: strict JSON/JSONL framing for stamped text
+  posts (`Stored`, `encodeStored`/`decodeStored`, `encodeRow`/`decodeRow`,
+  `encodeLog`/`decodeLog`). Logs stay oldest-first and a malformed row is
+  rejected with its row number, offset and reason rather than dropped.
 - Added `span`, `span1`, and `peek` to `Circuit.Parser`.
 - `sepBy1` now commits: a trailing separator is a parse failure rather than
   being silently swallowed. Use `try` around the separator if you genuinely
