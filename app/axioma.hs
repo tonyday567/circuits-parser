@@ -237,6 +237,20 @@ augustNullIdRow :: T.Text
 augustNullIdRow =
   "{\"id\": null, \"ts\": \"2026-08-07T01:01:14.369092+00:00\", \"from\": \"scanner-4\", \"to\": [\"pitboss\"], \"thread\": [], \"body\": \"scanner-4 DONE: archive-dag-report-scanner-4.md — posts 133..176, lines 133..176\"}"
 
+-- | The August failure at its original position. Two hundred sixty-eight valid
+-- rows precede the verbatim bad row; padding the last valid body puts its
+-- zero-based character offset at 291893 without shipping a generated fixture.
+augustFleetLog :: T.Text
+augustFleetLog =
+  T.replicate 267 prefixUnit
+    <> changedRow "body" (JString (T.replicate augustPadding "x"))
+    <> "\n"
+    <> augustNullIdRow
+  where
+    prefixUnit = encodeRow stored <> "\n"
+    emptyBodyUnit = changedRow "body" (JString "") <> "\n"
+    augustPadding = 291893 - 267 * T.length prefixUnit - T.length emptyBodyUnit
+
 storedFields :: [(T.Text, Json)]
 storedFields = case encodeStored stored of
   JObject fields -> fields
@@ -344,6 +358,10 @@ framingCases =
       rejectAt "framing legacy triple rejected" 1 0 "{\"ts\":\"2026-08-03T12:00:00\",\"sender\":\"kimi\",\"body\":\"legacy\"}",
       rejectAt "framing legacy bracket rejected" 1 0 "[2026-08-03T12:00:00] kimi: legacy",
       rejectAt "framing august null-id row" 1 0 augustNullIdRow,
+      rejectRow
+        "framing august fleet row error triple"
+        (RowError 269 291893 "ts: expected %Y-%m-%dT%H:%M:%S UTC timestamp")
+        augustFleetLog,
       rejectAt
         "framing malformed JSON row and character offset"
         3
