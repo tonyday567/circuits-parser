@@ -25,7 +25,9 @@
 -- missing @id@, a fractional or negative @id@, an empty sender or a
 -- non-string audience is refused here, while two rows that carry the same
 -- @id@ are both accepted, because an id collision is invisible to a per-row
--- codec and belongs to whoever builds the id-keyed index.
+-- codec and belongs to whoever builds the id-keyed index. Which colliding row
+-- wins, or whether a log carrying a collision is refused outright, is that
+-- index's decision and is not settled here.
 module Circuit.Parser.Framing
   ( Stored,
     RowError (..),

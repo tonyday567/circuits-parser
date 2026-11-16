@@ -228,6 +228,15 @@ secondStored =
     (framingTime, 43)
     (Post "yin" Nothing ["kimi"] [] "next")
 
+-- | The August fleet log's single malformed row, verbatim
+-- (@~/.config/free-agent-bus/log.jsonl@, line 269): a null id and a
+-- fractional-second UTC offset timestamp in one line. The timestamp form is
+-- what the decoder names first; the null id is refused on its own by
+-- "framing null id", which carries a well-formed timestamp.
+augustNullIdRow :: T.Text
+augustNullIdRow =
+  "{\"id\": null, \"ts\": \"2026-08-07T01:01:14.369092+00:00\", \"from\": \"scanner-4\", \"to\": [\"pitboss\"], \"thread\": [], \"body\": \"scanner-4 DONE: archive-dag-report-scanner-4.md — posts 133..176, lines 133..176\"}"
+
 storedFields :: [(T.Text, Json)]
 storedFields = case encodeStored stored of
   JObject fields -> fields
@@ -327,6 +336,7 @@ framingCases =
       rejectAt "framing duplicate id" 1 0 (objectRow (storedFields ++ [("id", JNumber 42)])),
       rejectAt "framing legacy triple rejected" 1 0 "{\"ts\":\"2026-08-03T12:00:00\",\"sender\":\"kimi\",\"body\":\"legacy\"}",
       rejectAt "framing legacy bracket rejected" 1 0 "[2026-08-03T12:00:00] kimi: legacy",
+      rejectAt "framing august null-id row" 1 0 augustNullIdRow,
       rejectAt
         "framing malformed JSON row and character offset"
         3
