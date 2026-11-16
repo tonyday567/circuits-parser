@@ -232,7 +232,7 @@ secondStored =
 -- (@~/.config/free-agent-bus/log.jsonl@, line 269): a null id and a
 -- fractional-second UTC offset timestamp in one line. The timestamp form is
 -- what the decoder names first; the null id is refused on its own by
--- "framing null id", which carries a well-formed timestamp.
+-- "framing null id row error triple", which carries a well-formed timestamp.
 augustNullIdRow :: T.Text
 augustNullIdRow =
   "{\"id\": null, \"ts\": \"2026-08-07T01:01:14.369092+00:00\", \"from\": \"scanner-4\", \"to\": [\"pitboss\"], \"thread\": [], \"body\": \"scanner-4 DONE: archive-dag-report-scanner-4.md — posts 133..176, lines 133..176\"}"
@@ -325,7 +325,7 @@ framingCases =
       rejectAt "framing negative parent" 1 0 (changedRow "thread" (JArray (V.fromList [JNumber (-1)]))),
       rejectAt "framing fractional parent" 1 0 (changedRow "thread" (JArray (V.fromList [JNumber 1.5]))),
       rejectAt "framing negative id" 1 0 (changedRow "id" (JNumber (-1))),
-      rejectAt "framing null id" 1 0 (changedRow "id" JNull),
+      rejectRow "framing null id row error triple" (RowError 1 0 "id/thread: expected number") (changedRow "id" JNull),
       rejectAt "framing fractional id" 1 0 (changedRow "id" (JNumber 42.5)),
       rejectAt "framing sender type" 1 0 (changedRow "from" (JBool True)),
       rejectAt "framing empty sender" 1 0 (changedRow "from" (JString "")),
