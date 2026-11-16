@@ -270,10 +270,22 @@ framingCases =
         "framing empty recipient delivers nowhere"
         (Right False)
         (fmap (\stored' -> deliversTo (stamped stored') ["a", "b"]) (decodeRow (changedPlainRow "to" (JArray (V.fromList [JString ""]))))),
+      -- The discriminating case: ["a", "b"] is a subscription list on which a
+      -- core `deliversTo` would agree with or without the normalisation, so it
+      -- cannot witness the legacy discard convention. [""] is a subscriber the
+      -- empty string would hit if the decoder passed ["\""] through.
+      check
+        "framing empty recipient does not deliver to the empty subscription"
+        (Right False)
+        (fmap (\stored' -> deliversTo (stamped stored') [""]) (decodeRow (changedPlainRow "to" (JArray (V.fromList [JString ""]))))),
       check
         "framing empty audience delivers nowhere"
         (Right False)
         (fmap (\stored' -> deliversTo (stamped stored') ["a", "b"]) (decodeRow (encodeRow discardStored))),
+      check
+        "framing empty audience does not deliver to the empty subscription"
+        (Right False)
+        (fmap (\stored' -> deliversTo (stamped stored') [""]) (decodeRow (encodeRow discardStored))),
       check
         "framing named recipient delivers"
         (Right True)

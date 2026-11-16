@@ -5,7 +5,10 @@
 -- A stored row carries @id@, @ts@, @from@, @channel@, @to@, @thread@ and
 -- @body@. Timestamps use second-precision UTC in @%Y-%m-%dT%H:%M:%S@ form.
 -- An absent @channel@ decodes as 'Nothing'; unknown fields are ignored.
--- Senders are nonempty; the legacy discard audience @[""]@ decodes as @[]@.
+-- Senders are nonempty. The legacy discard audience @[""]@ decodes as @[]@,
+-- and this module is the sole implementation of that convention: a row whose
+-- audience is @[""]@ delivers nowhere, including to a subscriber itself named
+-- @""@, which 'Circuit.Post.deliversTo' would otherwise match.
 --
 -- Logs are oldest first, and encoding preserves that order. 'decodeLog'
 -- ignores blank rows and rejects the first malformed row rather than
