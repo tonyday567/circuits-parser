@@ -309,6 +309,7 @@ framingCases =
       rejectAt "framing negative parent" 1 0 (changedRow "thread" (JArray (V.fromList [JNumber (-1)]))),
       rejectAt "framing fractional parent" 1 0 (changedRow "thread" (JArray (V.fromList [JNumber 1.5]))),
       rejectAt "framing negative id" 1 0 (changedRow "id" (JNumber (-1))),
+      rejectAt "framing null id" 1 0 (changedRow "id" JNull),
       rejectAt "framing fractional id" 1 0 (changedRow "id" (JNumber 42.5)),
       rejectAt "framing sender type" 1 0 (changedRow "from" (JBool True)),
       rejectAt "framing empty sender" 1 0 (changedRow "from" (JString "")),

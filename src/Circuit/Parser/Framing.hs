@@ -16,6 +16,16 @@
 -- offset of the row in the input, and a reason. A row whose JSON is
 -- syntactically broken names the lexer's byte offset inside the row when the
 -- lexer can supply one.
+--
+-- The policy is part of the contract: a non-conforming row is refused and
+-- named; it is never dropped, and no caller may substitute a drop for a
+-- refusal. Reported loss is what makes a bad row visible, so a reader that
+-- skips what it cannot parse has to say so at the same volume as it would say
+-- it read the row. This matters where the codec is the only witness: a
+-- missing @id@, a fractional or negative @id@, an empty sender or a
+-- non-string audience is refused here, while two rows that carry the same
+-- @id@ are both accepted, because an id collision is invisible to a per-row
+-- codec and belongs to whoever builds the id-keyed index.
 module Circuit.Parser.Framing
   ( Stored,
     RowError (..),
