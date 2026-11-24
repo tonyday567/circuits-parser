@@ -141,8 +141,8 @@ module Circuit.Parser
 where
 
 import Circuit.Category (K (..))
-import Circuit.Machine (Step (..))
 import Circuit.Parser.Stream (These (..), Uncons (..))
+import Circuit.Step (Step (..))
 import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Monad (MonadPlus, void)
 import Data.Bifunctor (first)

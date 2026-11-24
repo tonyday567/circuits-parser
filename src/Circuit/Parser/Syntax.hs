@@ -99,9 +99,9 @@ module Circuit.Parser.Syntax
 where
 
 import Circuit.Category (Category (..), K (..))
-import Circuit.Machine (Step (..))
 import Circuit.Parser (Parser (..), Uncons (..))
 import Circuit.Parser qualified as PU
+import Circuit.Step (Step (..))
 import Circuit.Syntax
   ( Algebra (..),
     SigCompose (..),
